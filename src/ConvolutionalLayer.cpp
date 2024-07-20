@@ -43,30 +43,29 @@ namespace nnm {
 
     Tensor4D ConvolutionalLayer::forward(const Tensor4D &input) {
         size_t N = input.getBatchSize();
-        size_t H_in = input.getHeight();
-        size_t W_in = input.getWidth();
-        size_t H_out = 1 + (H_in + 2 * padding - kernel_size) / stride;
-        size_t W_out = 1 + (W_in + 2 * padding - kernel_size) / stride;
+        size_t H = input.getHeight();
+        size_t W = input.getWidth();
+
+        size_t H_out = 1 + (H + 2 * padding - kernel_size) / stride;
+        size_t W_out = 1 + (W + 2 * padding - kernel_size) / stride;
 
         Tensor4D output(N, out_channels, H_out, W_out);
 
+        Tensor4D padded_input = add_padding(input);
+
         for (size_t n = 0; n < N; ++n) {
             for (size_t f = 0; f < out_channels; ++f) {
-                for (size_t h_out = 0; h_out < H_out; ++h_out) {
-                    for (size_t w_out = 0; w_out < W_out; ++w_out) {
+                for (size_t i = 0; i < H_out; ++i) {
+                    for (size_t j = 0; j < W_out; ++j) {
                         float sum = 0.0f;
                         for (size_t c = 0; c < in_channels; ++c) {
-                            for (size_t kh = 0; kh < kernel_size; ++kh) {
-                                for (size_t kw = 0; kw < kernel_size; ++kw) {
-                                    int h_in = h_out * stride + kh - padding;
-                                    int w_in = w_out * stride + kw - padding;
-                                    if (h_in >= 0 && h_in < H_in && w_in >= 0 && w_in < W_in) {
-                                        sum += input(n, c, h_in, w_in) * weights(f, c, kh, kw);
-                                    }
+                            for (size_t k = 0; k < kernel_size; ++k) {
+                                for (size_t l = 0; l < kernel_size; ++l) {
+                                    sum += padded_input(n, c, i * stride + k, j * stride + l) * weights(f, c, k, l);
                                 }
                             }
                         }
-                        output(n, f, h_out, w_out) = sum + bias[f];
+                        output(n, f, i, j) = sum + bias[f];
                     }
                 }
             }
