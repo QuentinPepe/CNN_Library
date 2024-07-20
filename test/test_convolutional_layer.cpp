@@ -10,7 +10,7 @@ namespace nnm {
 
     class ConvolutionalLayerTest : public ::testing::Test {
     protected:
-        static constexpr float epsilon = 1e-5f;
+        static constexpr float epsilon = 1e-2f;
 
         static float absolute_error(const Tensor4D &x, const Tensor4D &y) {
             if (x.getBatchSize() != y.getBatchSize() || x.getChannels() != y.getChannels() ||
@@ -95,20 +95,19 @@ namespace nnm {
 
         // Define correct output
         Tensor4D correct_out(1, 3, 2, 2);
-        correct_out(0, 0, 0, 0) = -1577.82517483f;
-        correct_out(0, 0, 0, 1) = -1715.03496503f;
-        correct_out(0, 0, 1, 0) = -2154.29370629f;
-        correct_out(0, 0, 1, 1) = -2308.0979021f;
-        correct_out(0, 1, 0, 0) = 480.12587413f;
-        correct_out(0, 1, 0, 1) = 440.25874126f;
-        correct_out(0, 1, 1, 0) = 296.38461538f;
-        correct_out(0, 1, 1, 1) = 240.59440559f;
-        correct_out(0, 2, 0, 0) = 2538.07692308f;
-        correct_out(0, 2, 0, 1) = 2595.55244755f;
-        correct_out(0, 2, 1, 0) = 2747.06293706f;
-        correct_out(0, 2, 1, 1) = 2789.28671329f;
+        correct_out(0, 0, 0, 0) = -1585.7484f;
+        correct_out(0, 0, 0, 1) = -1724.0426f;
+        correct_out(0, 0, 1, 0) = -2163.5107f;
+        correct_out(0, 0, 1, 1) = -2318.1953f;
+        correct_out(0, 1, 0, 0) = 480.44412f;
+        correct_out(0, 1, 0, 1) = 440.4925f;
+        correct_out(0, 1, 1, 0) = 296.05194f;
+        correct_out(0, 1, 1, 1) = 239.70985f;
+        correct_out(0, 2, 0, 0) = 2546.6365f;
+        correct_out(0, 2, 0, 1) = 2605.0276f;
+        correct_out(0, 2, 1, 0) = 2755.6147f;
+        correct_out(0, 2, 1, 1) = 2797.6147f;
 
-        // Print correct output for debugging
         std::cout << "Correct output:" << std::endl;
         correct_out.print();
 

@@ -58,17 +58,21 @@ namespace nnm {
 
         for (size_t n = 0; n < N; ++n) {
             for (size_t f = 0; f < out_channels; ++f) {
-                for (size_t i = 0; i < H_out; ++i) {
-                    for (size_t j = 0; j < W_out; ++j) {
-                        Tensor4D x_slice = padded_input.subTensor(n, 0, i * stride, j * stride,
+                int height_index = 0;
+                for (size_t i = 0; i < H; i += stride) {
+                    int width_index = 0;
+                    for (size_t j = 0; j < W; j += stride) {
+                        Tensor4D x_slice = padded_input.subTensor(n, 0, i, j,
                                                                   1, in_channels, kernel_size, kernel_size);
                         Tensor4D w_slice = weights.subTensor(f, 0, 0, 0,
                                                              1, in_channels, kernel_size, kernel_size);
-
                         float sum = x_slice.elementWiseMul(w_slice).sum() + bias[f];
-                        output(n, f, i, j) = sum;
+                        output(n, f, height_index, width_index) = sum;
+                        width_index++;
                     }
+                    height_index++;
                 }
+
             }
         }
 
@@ -105,11 +109,11 @@ namespace nnm {
     }
 
     void ConvolutionalLayer::set_weights(const Tensor4D &new_weights) {
-        // Implement set_weights functionality
+        weights = new_weights;
     }
 
     void ConvolutionalLayer::set_bias(const Vector &new_bias) {
-        // Implement set_bias functionality
+        bias = new_bias;
     }
 
     std::unique_ptr<Layer<Tensor4D>> ConvolutionalLayer::clone() const {
