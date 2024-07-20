@@ -1,0 +1,1113 @@
+/*-- File: ConvolutionalLayer.cpp start --*/
+/*-- #include "ConvolutionalLayer.h" start --*/
+
+/*-- #include "Layer.h" start --*/
+
+/*-- #include "Matrix.h" start --*/
+
+#include <vector>
+#include <stdexcept>
+#include <algorithm>
+#include <cstring>
+#include <immintrin.h>
+#include <iostream>
+#include <cmath>
+#include <numeric>
+
+namespace nnm {
+    class Matrix {
+    private:
+        std::vector<float> data;
+        size_t rows;
+        size_t cols;
+
+        static constexpr size_t STRASSEN_THRESHOLD = 64;
+
+        Matrix multiplyAVX(const Matrix &other) const {
+            if (cols != other.rows) {
+                throw std::invalid_argument("Matrix dimensions do not match for multiplication");
+            }
+            Matrix result(rows, other.cols);
+#pragma omp parallel for
+            for (size_t i = 0; i < rows; ++i) {
+                for (size_t j = 0; j < other.cols; j += 4) {
+                    __m256d sum = _mm256_setzero_pd();
+                    for (size_t k = 0; k < cols; ++k) {
+                        __m256d a = _mm256_set1_pd(static_cast<double>((*this)(i, k)));
+                        __m256d b = _mm256_setr_pd(
+                                static_cast<double>(other(k, j)),
+                                static_cast<double>(other(k, j + 1)),
+                                static_cast<double>(other(k, j + 2)),
+                                static_cast<double>(other(k, j + 3))
+                        );
+                        sum = _mm256_add_pd(sum, _mm256_mul_pd(a, b));
+                    }
+                    double temp[4];
+                    _mm256_storeu_pd(temp, sum);
+                    for (int k = 0; k < 4 && j + k < other.cols; ++k) {
+                        result(i, j + k) = static_cast<float>(temp[k]);
+                    }
+                }
+            }
+            return result;
+        }
+
+        Matrix strassen(const Matrix &other) const {
+            if (rows != cols || other.rows != other.cols || rows != other.rows) {
+                throw std::invalid_argument("Matrices must be square and of the same size for Strassen's algorithm");
+            }
+
+            size_t n = rows;
+            if (n <= STRASSEN_THRESHOLD) {
+                return multiplyAVX(other);
+            }
+
+            size_t new_size = n / 2;
+            Matrix a11(new_size, new_size), a12(new_size, new_size), a21(new_size, new_size), a22(new_size, new_size);
+            Matrix b11(new_size, new_size), b12(new_size, new_size), b21(new_size, new_size), b22(new_size, new_size);
+
+            // Split matrices
+            for (size_t i = 0; i < new_size; ++i) {
+                for (size_t j = 0; j < new_size; ++j) {
+                    a11(i, j) = (*this)(i, j);
+                    a12(i, j) = (*this)(i, j + new_size);
+                    a21(i, j) = (*this)(i + new_size, j);
+                    a22(i, j) = (*this)(i + new_size, j + new_size);
+
+                    b11(i, j) = other(i, j);
+                    b12(i, j) = other(i, j + new_size);
+                    b21(i, j) = other(i + new_size, j);
+                    b22(i, j) = other(i + new_size, j + new_size);
+                }
+            }
+
+            // Recursive steps
+            Matrix p1 = (a11 + a22).strassen(b11 + b22);
+            Matrix p2 = (a21 + a22).strassen(b11);
+            Matrix p3 = a11.strassen(b12 - b22);
+            Matrix p4 = a22.strassen(b21 - b11);
+            Matrix p5 = (a11 + a12).strassen(b22);
+            Matrix p6 = (a21 - a11).strassen(b11 + b12);
+            Matrix p7 = (a12 - a22).strassen(b21 + b22);
+
+            // Calculate result quadrants
+            Matrix c11 = p1 + p4 - p5 + p7;
+            Matrix c12 = p3 + p5;
+            Matrix c21 = p2 + p4;
+            Matrix c22 = p1 - p2 + p3 + p6;
+
+            // Combine result
+            Matrix result(n, n);
+            for (size_t i = 0; i < new_size; ++i) {
+                for (size_t j = 0; j < new_size; ++j) {
+                    result(i, j) = c11(i, j);
+                    result(i, j + new_size) = c12(i, j);
+                    result(i + new_size, j) = c21(i, j);
+                    result(i + new_size, j + new_size) = c22(i, j);
+                }
+            }
+
+            return result;
+        }
+
+    public:
+        Matrix(size_t rows, size_t cols) : rows(rows), cols(cols), data(rows * cols, 0.0f) {}
+
+        Matrix(size_t rows, size_t cols, float value) : rows(rows), cols(cols), data(rows * cols, value) {}
+
+
+        float &operator()(size_t i, size_t j) {
+            return data[i * cols + j];
+        }
+
+        const float &operator()(size_t i, size_t j) const {
+            return data[i * cols + j];
+        }
+
+        Matrix operator+(const Matrix &other) const {
+            if (rows != other.rows || cols != other.cols) {
+                throw std::invalid_argument("Matrix dimensions do not match for addition");
+            }
+            Matrix result(rows, cols);
+            for (size_t i = 0; i < rows * cols; ++i) {
+                result.data[i] = data[i] + other.data[i];
+            }
+            return result;
+        }
+
+        Matrix operator-(const Matrix &other) const {
+            if (rows != other.rows || cols != other.cols) {
+                throw std::invalid_argument("Matrix dimensions do not match for subtraction");
+            }
+            Matrix result(rows, cols);
+            for (size_t i = 0; i < rows * cols; ++i) {
+                result.data[i] = data[i] - other.data[i];
+            }
+            return result;
+        }
+
+        Matrix operator*(const Matrix &other) const {
+            if (cols != other.rows) {
+                throw std::invalid_argument("Matrix dimensions do not match for multiplication");
+            }
+            if (rows == cols && other.rows == other.cols && (rows & (rows - 1)) == 0) {
+                return strassen(other);
+            }
+            return multiplyAVX(other);
+        }
+
+        void print() const {
+            for (size_t i = 0; i < rows; ++i) {
+                for (size_t j = 0; j < cols; ++j) {
+                    std::cout << (*this)(i, j) << " ";
+                }
+                std::cout << std::endl;
+            }
+        }
+
+        [[nodiscard]] Matrix transpose() const {
+            Matrix result(cols, rows);
+            for (size_t i = 0; i < rows; ++i) {
+                for (size_t j = 0; j < cols; ++j) {
+                    result(j, i) = (*this)(i, j);
+                }
+            }
+            return result;
+        }
+
+        void reshape(size_t new_rows, size_t new_cols) {
+            if (new_rows * new_cols != rows * cols) {
+                throw std::invalid_argument(
+                        "New dimensions must have the same number of elements as the original matrix");
+            }
+            rows = new_rows;
+            cols = new_cols;
+        }
+
+
+        [[nodiscard]] Matrix pad(size_t pad_h, size_t pad_w) const {
+            Matrix padded(rows + 2 * pad_h, cols + 2 * pad_w);
+            for (size_t i = 0; i < rows; ++i) {
+                for (size_t j = 0; j < cols; ++j) {
+                    padded(i + pad_h, j + pad_w) = (*this)(i, j);
+                }
+            }
+            return padded;
+        }
+
+        [[nodiscard]] Matrix subMatrix(size_t start_row, size_t start_col, size_t sub_rows, size_t sub_cols) const {
+            Matrix sub(sub_rows, sub_cols);
+            for (size_t i = 0; i < sub_rows; ++i) {
+                for (size_t j = 0; j < sub_cols; ++j) {
+                    sub(i, j) = (*this)(start_row + i, start_col + j);
+                }
+            }
+            return sub;
+        }
+
+        [[nodiscard]] Matrix elementWiseMul(const Matrix &other) const {
+            if (rows != other.rows || cols != other.cols) {
+                throw std::invalid_argument("Matrix dimensions do not match for element-wise multiplication");
+            }
+            Matrix result(rows, cols);
+            for (size_t i = 0; i < rows * cols; ++i) {
+                result.data[i] = data[i] * other.data[i];
+            }
+            return result;
+        }
+
+        [[nodiscard]] float sum() const {
+            return std::accumulate(data.begin(), data.end(), 0.0f);
+        }
+
+
+        [[nodiscard]] size_t getRows() const { return rows; }
+
+        [[nodiscard]] size_t getCols() const { return cols; }
+
+    };
+} // namespace nnm
+/*-- #include "Vector.h" start --*/
+
+#include <vector>
+#include <stdexcept>
+#include <algorithm>
+#include <numeric>
+#include <immintrin.h>
+#include <cmath>
+
+namespace nnm {
+
+    class Vector {
+    private:
+        alignas(32) std::vector<float> data;
+
+    public:
+        explicit Vector(size_t size) : data(size) {}
+
+        Vector(size_t size, float initial_value) : data(size, initial_value) {}
+
+        Vector(std::initializer_list<float> init) : data(init) {}
+
+        float &operator[](size_t index) {
+            return data[index];
+        }
+
+        const float &operator[](size_t index) const {
+            return data[index];
+        }
+
+        [[nodiscard]] size_t size() const {
+            return data.size();
+        }
+
+        Vector operator+(const Vector &other) const {
+            if (size() != other.size()) {
+                throw std::invalid_argument("Vector sizes do not match for addition");
+            }
+
+            Vector result(size());
+            size_t i = 0;
+
+            // Use AVX2 operations for blocks of 8 elements
+            for (; i + 8 <= size(); i += 8) {
+                __m256 a = _mm256_loadu_ps(&data[i]);
+                __m256 b = _mm256_loadu_ps(&other.data[i]);
+                __m256 sum = _mm256_add_ps(a, b);
+                _mm256_storeu_ps(&result.data[i], sum);
+            }
+
+            // Handle the remaining elements
+            for (; i < size(); ++i) {
+                result[i] = data[i] + other[i];
+            }
+
+            return result;
+        }
+
+        [[nodiscard]] float dot(const Vector &other) const {
+            if (size() != other.size()) {
+                throw std::invalid_argument("Vector sizes do not match for dot product");
+            }
+
+            __m256 sum = _mm256_setzero_ps();
+            size_t i = 0;
+
+            // Use AVX2 operations for blocks of 8 elements
+            for (; i + 8 <= size(); i += 8) {
+                __m256 a = _mm256_loadu_ps(&data[i]);
+                __m256 b = _mm256_loadu_ps(&other.data[i]);
+                sum = _mm256_add_ps(sum, _mm256_mul_ps(a, b));
+            }
+
+            // Sum the results from AVX2
+            float partial_sum[8];
+            _mm256_storeu_ps(partial_sum, sum);
+            float dot_product = partial_sum[0] + partial_sum[1] + partial_sum[2] + partial_sum[3] +
+                                partial_sum[4] + partial_sum[5] + partial_sum[6] + partial_sum[7];
+
+            // Handle the remaining elements
+            for (; i < size(); ++i) {
+                dot_product += data[i] * other[i];
+            }
+
+            return dot_product;
+        }
+
+        [[nodiscard]] float norm() const {
+            return std::sqrt(this->dot(*this));
+        }
+
+        Vector operator*(float scalar) const {
+            Vector result(size());
+            size_t i = 0;
+
+            // Use AVX2 operations for blocks of 8 elements
+            __m256 s = _mm256_set1_ps(scalar);
+            for (; i + 8 <= size(); i += 8) {
+                __m256 a = _mm256_loadu_ps(&data[i]);
+                __m256 product = _mm256_mul_ps(a, s);
+                _mm256_storeu_ps(&result.data[i], product);
+            }
+
+            // Handle the remaining elements
+            for (; i < size(); ++i) {
+                result[i] = data[i] * scalar;
+            }
+
+            return result;
+        }
+
+    };
+
+} // namespace nnm
+
+#include <memory>
+#include <string>
+
+namespace nnm {
+
+    class Layer {
+    public:
+        virtual ~Layer() = default;
+
+        virtual Matrix forward(const Matrix &input) = 0;
+
+        virtual Matrix backward(const Matrix &input, const Matrix &output_gradient) = 0;
+
+        virtual void update_parameters(float learning_rate) = 0;
+
+        virtual void save(std::ostream &os) const = 0;
+
+        virtual void load(std::istream &is) = 0;
+
+        virtual std::string get_name() const = 0;
+
+        virtual size_t get_input_size() const = 0;
+
+        virtual size_t get_output_size() const = 0;
+
+        virtual std::unique_ptr<Layer> clone() const = 0;
+    };
+
+} // namespace nnm
+/*-- #include "Matrix.h" start --*/
+/*-- #include "Vector.h" start --*/
+#include <random>
+
+namespace nnm {
+
+    class ConvolutionalLayer : public Layer {
+    private:
+        size_t in_channels, out_channels, kernel_size, stride, padding;
+        Matrix weights;
+        Vector bias;
+        Matrix weight_gradients;
+        Vector bias_gradients;
+
+    public:
+        ConvolutionalLayer(size_t in_channels, size_t out_channels, size_t kernel_size,
+                           size_t stride = 1, size_t padding = 0);
+
+        Matrix forward(const Matrix &input) override;
+
+        Matrix backward(const Matrix &input, const Matrix &output_gradient) override;
+
+        void update_parameters(float learning_rate) override;
+
+        void save(std::ostream &os) const override;
+
+        void load(std::istream &is) override;
+
+        [[nodiscard]] std::string get_name() const override;
+
+        [[nodiscard]] size_t get_input_size() const override;
+
+        [[nodiscard]] size_t get_output_size() const override;
+
+        [[nodiscard]] std::unique_ptr<Layer> clone() const override;
+
+        void set_weights(const Matrix &new_weights);
+
+        void set_bias(const Vector &new_bias);
+
+        [[nodiscard]] const Matrix &get_weights() const { return weights; }
+
+        [[nodiscard]] const Vector &get_bias() const { return bias; }
+
+        [[nodiscard]] size_t get_padding() const { return padding; }
+
+        [[nodiscard]] size_t get_kernel_size() const { return kernel_size; }
+
+        [[nodiscard]] size_t get_stride() const { return stride; }
+
+        Matrix add_padding(const Matrix &input) const;
+    };
+
+} // namespace nnm
+#include <cmath>
+#include <stdexcept>
+
+namespace nnm {
+
+    ConvolutionalLayer::ConvolutionalLayer(size_t in_channels, size_t out_channels, size_t kernel_size, size_t stride,
+                                           size_t padding)
+            : in_channels(in_channels), out_channels(out_channels), kernel_size(kernel_size),
+              stride(stride), padding(padding),
+              weights(out_channels, in_channels * kernel_size * kernel_size),
+              bias(out_channels),
+              weight_gradients(out_channels, in_channels * kernel_size * kernel_size),
+              bias_gradients(out_channels) {
+
+        // Initialization of weights
+        double step = 2.0 / (out_channels * in_channels * kernel_size * kernel_size - 1);
+        double current = -1.0;
+        for (size_t i = 0; i < weights.getRows(); ++i) {
+            for (size_t j = 0; j < weights.getCols(); ++j) {
+                weights(i, j) = static_cast<float>(current);
+                current += step;
+            }
+        }
+
+        // Initialization of biases
+        step = 2.0 / (out_channels - 1);
+        current = -1.0;
+        for (size_t i = 0; i < out_channels; ++i) {
+            bias[i] = static_cast<float>(current);
+            current += step;
+        }
+    }
+
+    Matrix ConvolutionalLayer::add_padding(const Matrix &input) const {
+        size_t H = static_cast<size_t>(std::sqrt(input.getCols() / in_channels));
+        size_t W = H;
+        size_t padded_height = H + 2 * padding;
+        size_t padded_width = W + 2 * padding;
+
+        Matrix padded_input(padded_height, padded_width * in_channels, 0.0f);
+
+        for (size_t c = 0; c < in_channels; ++c) {
+            for (size_t h = 0; h < H; ++h) {
+                for (size_t w = 0; w < W; ++w) {
+                    padded_input(h + padding, w + padding + c * padded_width) =
+                            input(0, w + h * W + c * H * W);
+                }
+            }
+        }
+
+        return padded_input;
+    }
+
+    Matrix ConvolutionalLayer::forward(const Matrix &input) {
+        size_t N = input.getRows();
+        size_t H = static_cast<size_t>(std::sqrt(input.getCols() / in_channels));
+        size_t W = H;
+
+        size_t H_out = (H + 2 * padding - kernel_size) / stride + 1;
+        size_t W_out = (W + 2 * padding - kernel_size) / stride + 1;
+
+        Matrix output(N, out_channels * H_out * W_out);
+
+        Matrix x_padded = add_padding(input);
+
+        for (size_t n = 0; n < N; ++n) {
+            for (size_t f = 0; f < out_channels; ++f) {
+                for (size_t i = 0; i < H_out; ++i) {
+                    for (size_t j = 0; j < W_out; ++j) {
+                        double sum = 0.0;
+                        for (size_t c = 0; c < in_channels; ++c) {
+                            for (size_t p = 0; p < kernel_size; ++p) {
+                                for (size_t q = 0; q < kernel_size; ++q) {
+                                    size_t h_index = i * stride + p;
+                                    size_t w_index = j * stride + q;
+                                    sum += static_cast<double>(x_padded(n, (c * (H + 2 * padding) + h_index) *
+                                                                           (W + 2 * padding) + w_index)) *
+                                           weights(f, (c * kernel_size + p) * kernel_size + q);
+                                }
+                            }
+                        }
+                        output(n, (f * H_out + i) * W_out + j) = static_cast<float>(sum + bias[f]);
+                    }
+                }
+            }
+        }
+
+        return output;
+    }
+
+    Matrix ConvolutionalLayer::backward(const Matrix &input, const Matrix &output_gradient) {
+        // Implement backward pass
+        return Matrix(input.getRows(), input.getCols());
+    }
+
+    void ConvolutionalLayer::update_parameters(float learning_rate) {
+        for (size_t i = 0; i < weights.getRows(); ++i) {
+            for (size_t j = 0; j < weights.getCols(); ++j) {
+                weights(i, j) -= learning_rate * weight_gradients(i, j);
+            }
+        }
+        for (size_t i = 0; i < bias.size(); ++i) {
+            bias[i] -= learning_rate * bias_gradients[i];
+        }
+    }
+
+    void ConvolutionalLayer::save(std::ostream &os) const {
+        // Implement save functionality
+    }
+
+    void ConvolutionalLayer::load(std::istream &is) {
+        // Implement load functionality
+    }
+
+    std::string ConvolutionalLayer::get_name() const {
+        return "ConvolutionalLayer";
+    }
+
+    size_t ConvolutionalLayer::get_input_size() const {
+        return in_channels;
+    }
+
+    size_t ConvolutionalLayer::get_output_size() const {
+        return out_channels;
+    }
+
+    std::unique_ptr<Layer> ConvolutionalLayer::clone() const {
+        return std::make_unique<ConvolutionalLayer>(*this);
+    }
+
+    void ConvolutionalLayer::set_weights(const Matrix &new_weights) {
+        if (new_weights.getRows() != weights.getRows() || new_weights.getCols() != weights.getCols()) {
+            throw std::invalid_argument("New weights dimensions do not match");
+        }
+        weights = new_weights;
+    }
+
+    void ConvolutionalLayer::set_bias(const Vector &new_bias) {
+        if (new_bias.size() != bias.size()) {
+            throw std::invalid_argument("New bias size does not match");
+        }
+        bias = new_bias;
+    }
+
+} // namespace nnm
+
+/*-- File: ConvolutionalLayer.cpp end --*/
+/*-- #include "ConvolutionalLayer.h" start --*/
+/*-- File: FullyConnectedLayer.cpp start --*/
+//
+// Created by kazede on 19/07/24.
+//
+
+/*-- #include "FullyConnectedLayer.h" start --*/
+
+/*-- #include "Layer.h" start --*/
+
+namespace nnm {
+
+    class FullyConnectedLayer : public Layer {
+    private:
+        Matrix weights;
+        Vector bias;
+
+    public:
+        FullyConnectedLayer(size_t input_size, size_t output_size);
+
+        Matrix forward(const Matrix &input) override;
+
+        Matrix backward(const Matrix &input, const Matrix &output_gradient) override;
+
+        void update_parameters(float learning_rate) override;
+
+        void save(std::ostream &os) const override;
+
+        void load(std::istream &is) override;
+    };
+
+} // namespace nnm
+
+/*-- File: FullyConnectedLayer.cpp end --*/
+/*-- #include "FullyConnectedLayer.h" start --*/
+/*-- #include "Layer.h" start --*/
+/*-- #include "Matrix.h" start --*/
+/*-- File: PoolingLayer.cpp start --*/
+/*-- #include "PoolingLayer.h" start --*/
+
+/*-- #include "Layer.h" start --*/
+#include <vector>
+
+namespace nnm {
+
+    class PoolingLayer : public Layer {
+    public:
+        PoolingLayer(size_t kernel_size, size_t stride);
+
+        ~PoolingLayer() override;
+
+        Matrix forward(const Matrix &input) override;
+
+        Matrix backward(const Matrix &input, const Matrix &output_gradient) override;
+
+        void update_parameters(float learning_rate) override;
+
+        void save(std::ostream &os) const override;
+
+        void load(std::istream &is) override;
+
+        std::string get_name() const override;
+
+        size_t get_input_size() const override;
+
+        size_t get_output_size() const override;
+
+        std::unique_ptr<Layer> clone() const override;
+
+    private:
+        size_t kernel_size;
+        size_t stride;
+        Matrix *last_input;
+        std::vector<std::pair<size_t, size_t>> max_indices;
+    };
+
+} // namespace nnm
+#include <algorithm>
+#include <stdexcept>
+#include <limits>
+
+namespace nnm {
+
+    PoolingLayer::PoolingLayer(size_t kernel_size, size_t stride)
+            : kernel_size(kernel_size), stride(stride), last_input(nullptr) {}
+
+    PoolingLayer::~PoolingLayer() {
+        delete last_input;
+    }
+
+    Matrix PoolingLayer::forward(const Matrix &input) {
+        size_t input_height = input.getRows();
+        size_t input_width = input.getCols();
+        size_t output_height = (input_height - kernel_size) / stride + 1;
+        size_t output_width = (input_width - kernel_size) / stride + 1;
+
+        Matrix output(output_height, output_width);
+        max_indices.clear();
+        max_indices.reserve(output_height * output_width);
+
+        for (size_t i = 0; i < output_height; ++i) {
+            for (size_t j = 0; j < output_width; ++j) {
+                float max_val = std::numeric_limits<float>::lowest();
+                size_t max_i = 0, max_j = 0;
+
+                for (size_t ki = 0; ki < kernel_size; ++ki) {
+                    for (size_t kj = 0; kj < kernel_size; ++kj) {
+                        size_t input_i = i * stride + ki;
+                        size_t input_j = j * stride + kj;
+                        if (input(input_i, input_j) > max_val) {
+                            max_val = input(input_i, input_j);
+                            max_i = input_i;
+                            max_j = input_j;
+                        }
+                    }
+                }
+
+                output(i, j) = max_val;
+                max_indices.emplace_back(max_i, max_j);
+            }
+        }
+
+        delete last_input;
+        last_input = new Matrix(input);
+        return output;
+    }
+
+    Matrix PoolingLayer::backward(const Matrix &input, const Matrix &output_gradient) {
+        size_t input_height = last_input->getRows();
+        size_t input_width = last_input->getCols();
+
+        Matrix input_gradient(input_height, input_width);
+
+        size_t idx = 0;
+        for (size_t i = 0; i < output_gradient.getRows(); ++i) {
+            for (size_t j = 0; j < output_gradient.getCols(); ++j) {
+                const auto &[max_i, max_j] = max_indices[idx++];
+                input_gradient(max_i, max_j) += output_gradient(i, j);
+            }
+        }
+
+        return input_gradient;
+    }
+
+    void PoolingLayer::update_parameters(float learning_rate) {
+        // Pooling layer has no parameters to update
+    }
+
+    void PoolingLayer::save(std::ostream &os) const {
+        os << kernel_size << " " << stride << "\n";
+    }
+
+    void PoolingLayer::load(std::istream &is) {
+        is >> kernel_size >> stride;
+    }
+
+    std::string PoolingLayer::get_name() const {
+        return "PoolingLayer";
+    }
+
+    size_t PoolingLayer::get_input_size() const {
+        return last_input ? last_input->getCols() : 0;
+    }
+
+    size_t PoolingLayer::get_output_size() const {
+        return last_input ? (last_input->getCols() - kernel_size) / stride + 1 : 0;
+    }
+
+    std::unique_ptr<Layer> PoolingLayer::clone() const {
+        auto cloned = std::make_unique<PoolingLayer>(kernel_size, stride);
+        if (last_input) {
+            cloned->last_input = new Matrix(*last_input);
+        }
+        cloned->max_indices = max_indices;
+        return cloned;
+    }
+
+} // namespace nnm
+/*-- File: PoolingLayer.cpp end --*/
+/*-- #include "PoolingLayer.h" start --*/
+/*-- File: ReLULayer.cpp start --*/
+/*-- #include "ReLULayer.h" start --*/
+
+/*-- #include "Layer.h" start --*/
+
+namespace nnm {
+
+    class ReLULayer : public Layer {
+    public:
+        ReLULayer();
+
+        ~ReLULayer() override;
+
+        Matrix forward(const Matrix &input) override;
+
+        Matrix backward(const Matrix &input, const Matrix &output_gradient) override;
+
+        void update_parameters(float learning_rate) override;
+
+        void save(std::ostream &os) const override;
+
+        void load(std::istream &is) override;
+
+        std::string get_name() const override;
+
+        size_t get_input_size() const override;
+
+        size_t get_output_size() const override;
+
+        std::unique_ptr<Layer> clone() const override;
+
+    private:
+        Matrix *last_input;
+    };
+
+} // namespace nnm
+#include <algorithm>
+#include <cmath>
+
+namespace nnm {
+
+    ReLULayer::ReLULayer() : last_input(nullptr) {}
+
+    ReLULayer::~ReLULayer() {
+        delete last_input;
+    }
+
+    Matrix ReLULayer::forward(const Matrix &input) {
+        delete last_input;
+        last_input = new Matrix(input);
+        Matrix output(input.getRows(), input.getCols());
+
+#pragma omp parallel for collapse(2)
+        for (size_t i = 0; i < input.getRows(); ++i) {
+            for (size_t j = 0; j < input.getCols(); ++j) {
+                output(i, j) = std::max(0.0f, input(i, j));
+            }
+        }
+
+        return output;
+    }
+
+    Matrix ReLULayer::backward(const Matrix &input, const Matrix &output_gradient) {
+        if (!last_input) {
+            throw std::runtime_error("Backward called before forward");
+        }
+
+        Matrix input_gradient(input.getRows(), input.getCols());
+
+#pragma omp parallel for collapse(2)
+        for (size_t i = 0; i < input.getRows(); ++i) {
+            for (size_t j = 0; j < input.getCols(); ++j) {
+                input_gradient(i, j) = (*last_input)(i, j) > 0 ? output_gradient(i, j) : 0;
+            }
+        }
+
+        return input_gradient;
+    }
+
+    void ReLULayer::update_parameters(float learning_rate) {
+        // ReLU has no parameters to update
+    }
+
+    void ReLULayer::save(std::ostream &os) const {
+        // ReLU has no parameters to save
+    }
+
+    void ReLULayer::load(std::istream &is) {
+        // ReLU has no parameters to load
+    }
+
+    std::string ReLULayer::get_name() const {
+        return "ReLULayer";
+    }
+
+    size_t ReLULayer::get_input_size() const {
+        return last_input ? last_input->getCols() : 0;
+    }
+
+    size_t ReLULayer::get_output_size() const {
+        return last_input ? last_input->getCols() : 0;
+    }
+
+    std::unique_ptr<Layer> ReLULayer::clone() const {
+        return std::make_unique<ReLULayer>(*this);
+    }
+
+} // namespace nnm
+/*-- File: ReLULayer.cpp end --*/
+/*-- #include "ReLULayer.h" start --*/
+/*-- #include "Vector.h" start --*/
+/*-- File: main.cpp start --*/
+#include <iostream>
+#include <vector>
+#include <cmath>
+#include <tuple>
+
+using namespace std;
+
+// Define a function for the naive forward pass of a convolutional layer
+tuple<vector<vector<vector<vector<float>>>>, tuple<vector<vector<vector<vector<float>>>>, vector<vector<
+        vector<vector<float>>>>, vector<float>, tuple<int, int>>>
+
+cnn_forward_naive(
+        const vector<vector<vector<vector<float>>
+
+        >> &x,
+        const vector<vector<vector<vector<float>>>> &w,
+        const vector<float> &b,
+        const tuple<int, int> &cnn_params
+) {
+    int stride, pad;
+    tie(stride, pad
+    ) =
+            cnn_params;
+
+// Get dimensions
+    int N = x.size();
+    int C = x[0].size();
+    int H = x[0][0].size();
+    int W = x[0][0][0].size();
+
+    int F = w.size();
+    int HH = w[0].size();
+    int WW = w[0][0].size();
+
+// Output dimensions
+    int height_out = 1 + (H + 2 * pad - HH) / stride;
+    int width_out = 1 + (W + 2 * pad - WW) / stride;
+
+// Initialize output feature maps
+    vector<vector<vector<vector<float>>>>
+            feature_maps(N, vector<vector<vector<float>>
+    >(F,
+      vector<vector<float>>(height_out, vector<float>(width_out, 0)
+      )));
+
+// Zero padding
+    vector<vector<vector<vector<float>>>>
+            x_padded(N, vector<vector<vector<float>>
+    >(C,
+      vector<vector<float>>(H
+                            + 2 * pad,
+                            vector<float>(W
+                                          + 2 * pad, 0))));
+
+    for (
+            int n = 0;
+            n < N;
+            ++n) {
+        for (
+                int c = 0;
+                c < C;
+                ++c) {
+            for (
+                    int i = 0;
+                    i < H;
+                    ++i) {
+                for (
+                        int j = 0;
+                        j < W;
+                        ++j) {
+                    x_padded[n][c][i + pad][j + pad] = x[n][c][i][j];
+                }
+            }
+        }
+    }
+
+// Convolution operation
+    for (
+            int n = 0;
+            n < N;
+            ++n) {
+        for (
+                int f = 0;
+                f < F;
+                ++f) {
+            for (
+                    int i = 0;
+                    i < height_out;
+                    ++i) {
+                for (
+                        int j = 0;
+                        j < width_out;
+                        ++j) {
+                    float sum = 0;
+                    for (
+                            int c = 0;
+                            c < C;
+                            ++c) {
+                        for (
+                                int di = 0;
+                                di < HH;
+                                ++di) {
+                            for (
+                                    int dj = 0;
+                                    dj < WW;
+                                    ++dj) {
+                                sum += x_padded[n][c][
+                                               i * stride
+                                               + di][
+                                               j * stride
+                                               + dj] * w[f][c][di][dj];
+                            }
+                        }
+                    }
+                    feature_maps[n][f][i][j] = sum + b[f];
+                }
+            }
+        }
+    }
+
+// Return the result
+    return
+            make_tuple(feature_maps, make_tuple(x, w, b, cnn_params)
+            );
+}
+
+// Define a function to calculate absolute error
+float absolute_error(const vector<vector<vector<vector<float>>
+
+>> &x, const vector<vector<vector<vector<float>>>> &y) {
+    float error = 0;
+    int N = x.size();
+    int F = x[0].size();
+    int H = x[0][0].size();
+    int W = x[0][0][0].size();
+
+    for (
+            int n = 0;
+            n < N;
+            ++n) {
+        for (
+                int f = 0;
+                f < F;
+                ++f) {
+            for (
+                    int i = 0;
+                    i < H;
+                    ++i) {
+                for (
+                        int j = 0;
+                        j < W;
+                        ++j) {
+                    error +=
+                            fabs(x[n][f][i][j]
+                                 - y[n][f][i][j]);
+                }
+            }
+        }
+    }
+
+    return
+            error;
+}
+
+int main() {
+    // Define shapes
+    int N = 1;  // Number of images
+    int C = 3;  // Number of channels
+    int H = 4;  // Height of image
+    int W = 4;  // Width of image
+
+    int F = 3;  // Number of filters
+    int HH = 4; // Filter height
+    int WW = 4; // Filter width
+
+    // Initialize data
+    vector<vector<vector<vector<float>>>> x(N, vector<vector<vector<float>>>(C, vector<vector<float>>(H, vector<float>(
+            W))));
+    vector<vector<vector<vector<float>>>> w(F, vector<vector<vector<float>>>(C, vector<vector<float>>(HH, vector<float>(
+            WW))));
+    vector<float> b(F);
+
+    // Fill input data, weights, and biases
+    float val = 0;
+    for (int n = 0; n < N; ++n) {
+        for (int c = 0; c < C; ++c) {
+            for (int i = 0; i < H; ++i) {
+                for (int j = 0; j < W; ++j) {
+                    x[n][c][i][j] = val++;
+                }
+            }
+        }
+    }
+
+    val = -1.0;
+    for (int f = 0; f < F; ++f) {
+        for (int c = 0; c < C; ++c) {
+            for (int i = 0; i < HH; ++i) {
+                for (int j = 0; j < WW; ++j) {
+                    w[f][c][i][j] = val;
+                    val += 0.1;
+                }
+            }
+        }
+    }
+
+    val = -1.0;
+    for (int f = 0; f < F; ++f) {
+        b[f] = val;
+        val += 0.5;
+    }
+
+    // Convolution parameters
+    tuple<int, int> cnn_params = make_tuple(2, 1);  // stride=2, pad=1
+
+    // Calculate output
+    auto [feature_maps, _] = cnn_forward_naive(x, w, b, cnn_params);
+
+    // Define true output (for testing)
+    vector<vector<vector<vector<float>>>> correct_out(N, vector<vector<vector<float>>>(F, vector<vector<float>>(2,
+                                                                                                                vector<float>(
+                                                                                                                        2))));
+    // Populate correct_out with known values
+    // In practice, these values would be derived from correct calculations or another trusted source
+
+    // Calculate and print absolute error
+    float error = absolute_error(correct_out, feature_maps);
+    cout << "Absolute error: " << error << endl;
+
+    // Print output feature maps for verification
+    for (const auto &fm: feature_maps) {
+        for (const auto &f: fm) {
+            for (const auto &row: f) {
+                for (float val: row) {
+                    cout << val << ' ';
+                }
+                cout << endl;
+            }
+            cout << endl;
+        }
+        cout << endl;
+    }
+
+    return 0;
+}
+
+/*-- File: main.cpp end --*/
