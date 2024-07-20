@@ -57,15 +57,13 @@ namespace nnm {
             for (size_t f = 0; f < out_channels; ++f) {
                 for (size_t i = 0; i < H_out; ++i) {
                     for (size_t j = 0; j < W_out; ++j) {
-                        float sum = 0.0f;
-                        for (size_t c = 0; c < in_channels; ++c) {
-                            for (size_t k = 0; k < kernel_size; ++k) {
-                                for (size_t l = 0; l < kernel_size; ++l) {
-                                    sum += padded_input(n, c, i * stride + k, j * stride + l) * weights(f, c, k, l);
-                                }
-                            }
-                        }
-                        output(n, f, i, j) = sum + bias[f];
+                        Tensor4D x_slice = padded_input.subTensor(n, 0, i * stride, j * stride,
+                                                                  1, in_channels, kernel_size, kernel_size);
+                        Tensor4D w_slice = weights.subTensor(f, 0, 0, 0,
+                                                             1, in_channels, kernel_size, kernel_size);
+
+                        float sum = x_slice.elementWiseMul(w_slice).sum() + bias[f];
+                        output(n, f, i, j) = sum;
                     }
                 }
             }
