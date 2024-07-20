@@ -170,6 +170,37 @@ namespace nnm {
             return result;
         }
 
+
+        [[nodiscard]] Tensor4D
+        pad(const std::vector<std::pair<size_t, size_t>> &padding, float constant_value = 0.0f) const {
+            if (padding.size() != 4) {
+                throw std::invalid_argument("Padding should be specified for all 4 dimensions");
+            }
+
+            size_t new_batch = batch_size + padding[0].first + padding[0].second;
+            size_t new_channels = channels + padding[1].first + padding[1].second;
+            size_t new_height = height + padding[2].first + padding[2].second;
+            size_t new_width = width + padding[3].first + padding[3].second;
+
+            Tensor4D padded(new_batch, new_channels, new_height, new_width);
+            padded.fill(constant_value);
+
+            for (size_t n = 0; n < batch_size; ++n) {
+                for (size_t c = 0; c < channels; ++c) {
+                    for (size_t h = 0; h < height; ++h) {
+                        for (size_t w = 0; w < width; ++w) {
+                            padded(n + padding[0].first,
+                                   c + padding[1].first,
+                                   h + padding[2].first,
+                                   w + padding[3].first) = (*this)(n, c, h, w);
+                        }
+                    }
+                }
+            }
+
+            return padded;
+        }
+
         size_t getBatchSize() const { return batch_size; }
 
         size_t getChannels() const { return channels; }

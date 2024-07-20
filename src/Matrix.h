@@ -18,7 +18,7 @@ namespace nnm {
 
         static constexpr size_t STRASSEN_THRESHOLD = 64;
 
-        Matrix multiplyAVX(const Matrix &other) const {
+        [[nodiscard]] Matrix multiplyAVX(const Matrix &other) const {
             if (cols != other.rows) {
                 throw std::invalid_argument("Matrix dimensions do not match for multiplication");
             }
@@ -47,7 +47,7 @@ namespace nnm {
             return result;
         }
 
-        Matrix strassen(const Matrix &other) const {
+        [[nodiscard]] Matrix strassen(const Matrix &other) const {
             if (rows != cols || other.rows != other.cols || rows != other.rows) {
                 throw std::invalid_argument("Matrices must be square and of the same size for Strassen's algorithm");
             }

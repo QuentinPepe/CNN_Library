@@ -355,3 +355,84 @@ TEST_F(Tensor4DTest, ChannelToMatrix) {
         }
     }
 }
+
+TEST_F(Tensor4DTest, Padding3) {
+    nnm::Tensor4D tensor(2, 2, 3, 3, 1.0f);
+
+    std::vector<std::pair<size_t, size_t>> padding = {
+            {1, 1},  // Batch dimension: pad 1 before and 1 after
+            {0, 2},  // Channel dimension: pad 0 before and 2 after
+            {2, 1},  // Height dimension: pad 2 before and 1 after
+            {1, 2}   // Width dimension: pad 1 before and 2 after
+    };
+
+    nnm::Tensor4D padded = tensor.pad(padding);
+
+    EXPECT_EQ(padded.getBatchSize(), 4);   // 2 + 1 + 1
+    EXPECT_EQ(padded.getChannels(), 4);    // 2 + 0 + 2
+    EXPECT_EQ(padded.getHeight(), 6);      // 3 + 2 + 1
+    EXPECT_EQ(padded.getWidth(), 6);       // 3 + 1 + 2
+
+    for (size_t n = 0; n < padded.getBatchSize(); ++n) {
+        for (size_t c = 0; c < padded.getChannels(); ++c) {
+            for (size_t h = 0; h < padded.getHeight(); ++h) {
+                for (size_t w = 0; w < padded.getWidth(); ++w) {
+                    if (n > 0 && n < 3 && c < 2 && h > 1 && h < 5 && w > 0 && w < 4) {
+                        EXPECT_FLOAT_EQ(padded(n, c, h, w), 1.0f);
+                    } else {
+                        // Padded areas
+                        EXPECT_FLOAT_EQ(padded(n, c, h, w), 0.0f);
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+TEST_F(Tensor4DTest, ComprehensivePadding) {
+    nnm::Tensor4D tensor(2, 2, 3, 3, 1.0f);
+
+    std::vector<std::pair<size_t, size_t>> padding = {
+            {1, 1},  // Batch dimension: pad 1 before and 1 after
+            {0, 2},  // Channel dimension: pad 0 before and 2 after
+            {2, 1},  // Height dimension: pad 2 before and 1 after
+            {1, 2}   // Width dimension: pad 1 before and 2 after
+    };
+
+    nnm::Tensor4D padded = tensor.pad(padding);
+
+    EXPECT_EQ(padded.getBatchSize(), 4);
+    EXPECT_EQ(padded.getChannels(), 4);
+    EXPECT_EQ(padded.getHeight(), 6);
+    EXPECT_EQ(padded.getWidth(), 6);
+
+    auto isOriginalValue = [](size_t n, size_t c, size_t h, size_t w) {
+        return (n == 1 || n == 2) && c < 2 && h >= 2 && h < 5 && w >= 1 && w < 4;
+    };
+
+    for (size_t n = 0; n < padded.getBatchSize(); ++n) {
+        for (size_t c = 0; c < padded.getChannels(); ++c) {
+            for (size_t h = 0; h < padded.getHeight(); ++h) {
+                for (size_t w = 0; w < padded.getWidth(); ++w) {
+                    if (isOriginalValue(n, c, h, w)) {
+                        EXPECT_FLOAT_EQ(padded(n, c, h, w), 1.0f)
+                                            << "Mismatch at position (" << n << ", " << c << ", " << h << ", " << w
+                                            << ")";
+                    } else {
+                        EXPECT_FLOAT_EQ(padded(n, c, h, w), 0.0f)
+                                            << "Mismatch at position (" << n << ", " << c << ", " << h << ", " << w
+                                            << ")";
+                    }
+                }
+            }
+        }
+    }
+
+    // Additional specific checks based on the NumPy output
+    EXPECT_FLOAT_EQ(padded(1, 0, 2, 1), 1.0f);
+    EXPECT_FLOAT_EQ(padded(1, 1, 4, 3), 1.0f);
+    EXPECT_FLOAT_EQ(padded(2, 1, 3, 2), 1.0f);
+    EXPECT_FLOAT_EQ(padded(0, 0, 0, 0), 0.0f);
+    EXPECT_FLOAT_EQ(padded(3, 3, 5, 5), 0.0f);
+}

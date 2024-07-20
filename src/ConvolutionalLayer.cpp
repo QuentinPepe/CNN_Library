@@ -51,7 +51,10 @@ namespace nnm {
 
         Tensor4D output(N, out_channels, H_out, W_out);
 
-        Tensor4D padded_input = add_padding(input);
+        Tensor4D padded_input = input.pad({{0,       0},
+                                           {0,       0},
+                                           {padding, padding},
+                                           {padding, padding}});
 
         for (size_t n = 0; n < N; ++n) {
             for (size_t f = 0; f < out_channels; ++f) {
@@ -72,31 +75,6 @@ namespace nnm {
         return output;
     }
 
-    Tensor4D ConvolutionalLayer::add_padding(const Tensor4D &input) const {
-        if (padding == 0) {
-            return input;
-        }
-
-        size_t N = input.getBatchSize();
-        size_t C = input.getChannels();
-        size_t H = input.getHeight();
-        size_t W = input.getWidth();
-
-        Tensor4D padded(N, C, H + 2 * padding, W + 2 * padding);
-        padded.fill(0);
-
-        for (size_t n = 0; n < N; ++n) {
-            for (size_t c = 0; c < C; ++c) {
-                for (size_t h = 0; h < H; ++h) {
-                    for (size_t w = 0; w < W; ++w) {
-                        padded(n, c, h + padding, w + padding) = input(n, c, h, w);
-                    }
-                }
-            }
-        }
-
-        return padded;
-    }
 
     Tensor4D ConvolutionalLayer::backward(const Tensor4D &input, const Tensor4D &output_gradient) {
         throw std::runtime_error("Not implemented");

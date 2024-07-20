@@ -51,8 +51,6 @@ namespace nnm {
         [[nodiscard]] size_t get_kernel_size() const { return kernel_size; }
 
         [[nodiscard]] size_t get_stride() const { return stride; }
-
-        Tensor4D add_padding(const Tensor4D &input) const;
     };
 
 } // namespace nnm
