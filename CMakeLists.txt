@@ -8,6 +8,12 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mavx2 -fopenmp")
 # Find SFML
 # find_package(SFML 2.5 COMPONENTS graphics window system REQUIRED)
 
+include(FetchContent)
+FetchContent_Declare(json
+        GIT_REPOSITORY https://github.com/nlohmann/json.git
+        GIT_TAG v3.11.2)
+FetchContent_MakeAvailable(json)
+
 add_subdirectory(src)
 
 option(BUILD_TESTS "Build the tests" ON)

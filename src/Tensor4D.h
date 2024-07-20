@@ -24,6 +24,9 @@ namespace nnm {
                 : batch_size(batch_size), channels(channels), height(height), width(width),
                   data(batch_size * channels * height * width, value) {}
 
+
+
+
         float &operator()(size_t n, size_t c, size_t h, size_t w) {
             return data[(n * channels * height * width) + (c * height * width) + (h * width) + w];
         }
@@ -120,6 +123,25 @@ namespace nnm {
                 }
             }
             return sub;
+        }
+
+        bool operator==(const Tensor4D &other) const {
+            if (getBatchSize() != other.getBatchSize() || getChannels() != other.getChannels() ||
+                getHeight() != other.getHeight() || getWidth() != other.getWidth()) {
+                return false;
+            }
+            for (size_t n = 0; n < getBatchSize(); ++n) {
+                for (size_t c = 0; c < getChannels(); ++c) {
+                    for (size_t h = 0; h < getHeight(); ++h) {
+                        for (size_t w = 0; w < getWidth(); ++w) {
+                            if ((*this)(n, c, h, w) != other(n, c, h, w)) {
+                                return false;
+                            }
+                        }
+                    }
+                }
+            }
+            return true;
         }
 
         size_t getBatchSize() const { return batch_size; }

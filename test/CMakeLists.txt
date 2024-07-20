@@ -8,14 +8,16 @@ if (GTEST_FOUND)
             test_vector.cpp
             test_convolutional_layer.cpp
             test_matrix_convolutional.cpp
+            test_tensor4d.cpp
     )
 
-    # Link the test executable with Google Test and our Game library
+    # Link the test executable with Google Test, our Game library, and nlohmann_json
     target_link_libraries(runTests
             PRIVATE
             GTest::GTest
             GTest::Main
             GameLib
+            nlohmann_json::nlohmann_json
     )
 
     # Make sure the compiler can find include files for our GameLib library
