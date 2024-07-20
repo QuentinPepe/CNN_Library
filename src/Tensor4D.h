@@ -8,6 +8,7 @@
 #include <iostream>
 #include <cmath>
 #include <numeric>
+#include "Matrix.h"
 
 namespace nnm {
     class Tensor4D {
@@ -23,8 +24,6 @@ namespace nnm {
         Tensor4D(size_t batch_size, size_t channels, size_t height, size_t width, float value)
                 : batch_size(batch_size), channels(channels), height(height), width(width),
                   data(batch_size * channels * height * width, value) {}
-
-
 
 
         float &operator()(size_t n, size_t c, size_t h, size_t w) {
@@ -144,6 +143,33 @@ namespace nnm {
             return true;
         }
 
+        Matrix channelToMatrix(const Tensor4D &tensor, size_t batch_index, size_t channel_index) {
+            size_t height = tensor.getHeight();
+            size_t width = tensor.getWidth();
+            Matrix result(height, width);
+
+            size_t base_offset = (batch_index * tensor.getChannels() * height * width) +
+                                 (channel_index * height * width);
+
+            const float *tensor_data = tensor.getData().data() + base_offset;
+
+            float *matrix_data = result.getData().data();
+
+            size_t num_elements = height * width;
+
+            size_t i = 0;
+            for (; i + 7 < num_elements; i += 8) {
+                __m256 tensor_values = _mm256_loadu_ps(tensor_data + i);
+                _mm256_storeu_ps(matrix_data + i, tensor_values);
+            }
+
+            for (; i < num_elements; ++i) {
+                matrix_data[i] = tensor_data[i];
+            }
+
+            return result;
+        }
+
         size_t getBatchSize() const { return batch_size; }
 
         size_t getChannels() const { return channels; }
@@ -151,5 +177,9 @@ namespace nnm {
         size_t getHeight() const { return height; }
 
         size_t getWidth() const { return width; }
+
+        const std::vector<float> &getData() const { return data; }
+
+        std::vector<float> &getData() { return data; }
     };
 } // namespace nnm

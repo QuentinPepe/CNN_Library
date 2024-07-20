@@ -220,5 +220,9 @@ namespace nnm {
 
         [[nodiscard]] size_t getCols() const { return cols; }
 
+        const std::vector<float> &getData() const { return data; }
+
+        std::vector<float> &getData() { return data; }
+
     };
 } // namespace nnm

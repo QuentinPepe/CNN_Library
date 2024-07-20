@@ -327,3 +327,31 @@ TEST_F(Tensor4DTest, SubTensor2) {
     }
 }
 
+
+TEST_F(Tensor4DTest, ChannelToMatrix) {
+    nnm::Tensor4D tensor(2, 3, 4, 4);
+    for (size_t n = 0; n < 2; ++n) {
+        for (size_t c = 0; c < 3; ++c) {
+            for (size_t h = 0; h < 4; ++h) {
+                for (size_t w = 0; w < 4; ++w) {
+                    tensor(n, c, h, w) = static_cast<float>(n * 100 + c * 10 + h * 4 + w);
+                }
+            }
+        }
+    }
+
+    size_t batch_index = 0;
+    size_t channel_index = 1;
+
+    nnm::Matrix result = tensor.channelToMatrix(tensor, batch_index, channel_index);
+
+    EXPECT_EQ(result.getRows(), 4);
+    EXPECT_EQ(result.getCols(), 4);
+
+    for (size_t h = 0; h < 4; ++h) {
+        for (size_t w = 0; w < 4; ++w) {
+            EXPECT_FLOAT_EQ(result(h, w), tensor(batch_index, channel_index, h, w));
+            EXPECT_FLOAT_EQ(result(h, w), static_cast<float>(10 + h * 4 + w));
+        }
+    }
+}

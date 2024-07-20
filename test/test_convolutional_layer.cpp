@@ -69,6 +69,7 @@ namespace nnm {
         Tensor4D w = linspace_tensor4d(-1.0, 1.0, w_shape);
         Vector b = linspace_vector(-1.0, 1.0, b_shape);
 
+
         // Print input data for debugging
         std::cout << "Input x:" << std::endl;
         x.print();
