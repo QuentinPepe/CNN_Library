@@ -6,7 +6,6 @@ if (GTEST_FOUND)
     add_executable(runTests main.cpp
             test_matrix.cpp
             test_vector.cpp
-            test_layer.cpp
             test_convolutional_layer.cpp
             test_matrix_convolutional.cpp
     )

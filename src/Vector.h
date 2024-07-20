@@ -109,6 +109,20 @@ namespace nnm {
             return result;
         }
 
+        void fill(float value) {
+            size_t i = 0;
+
+            // Use AVX2 operations for blocks of 8 elements
+            __m256 v = _mm256_set1_ps(value);
+            for (; i + 8 <= size(); i += 8) {
+                _mm256_storeu_ps(&data[i], v);
+            }
+
+            // Handle the remaining elements
+            for (; i < size(); ++i) {
+                data[i] = value;
+            }
+        }
     };
 
 } // namespace nnm

@@ -1,18 +1,13 @@
 add_library(GameLib
         Vector.h
         ConvolutionalLayer.cpp
-        ReLULayer.cpp
-        ReLULayer.h
-        PoolingLayer.cpp
-        PoolingLayer.h
-        FullyConnectedLayer.cpp
-        FullyConnectedLayer.h
 )
 
 add_executable(CNN main.cpp
         Layer.h
         Matrix.h
         ConvolutionalLayer.h
+        Tensor4D.h
 )
 
 target_link_libraries(CNN PRIVATE GameLib)

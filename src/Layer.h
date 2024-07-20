@@ -1,19 +1,19 @@
 #pragma once
 
-#include "Matrix.h"
-#include "Vector.h"
 #include <memory>
 #include <string>
+#include <iostream>
 
 namespace nnm {
 
+    template<typename T>
     class Layer {
     public:
         virtual ~Layer() = default;
 
-        virtual Matrix forward(const Matrix &input) = 0;
+        virtual T forward(const T &input) = 0;
 
-        virtual Matrix backward(const Matrix &input, const Matrix &output_gradient) = 0;
+        virtual T backward(const T &input, const T &output_gradient) = 0;
 
         virtual void update_parameters(float learning_rate) = 0;
 
@@ -27,7 +27,7 @@ namespace nnm {
 
         virtual size_t get_output_size() const = 0;
 
-        virtual std::unique_ptr<Layer> clone() const = 0;
+        virtual std::unique_ptr<Layer<T>> clone() const = 0;
     };
 
 } // namespace nnm

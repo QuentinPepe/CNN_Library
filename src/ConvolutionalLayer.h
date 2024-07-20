@@ -1,27 +1,28 @@
 #pragma once
 
 #include "Layer.h"
+#include "Tensor4D.h"
 #include "Matrix.h"
 #include "Vector.h"
 #include <random>
 
 namespace nnm {
 
-    class ConvolutionalLayer : public Layer {
+    class ConvolutionalLayer : public Layer<Tensor4D> {
     private:
         size_t in_channels, out_channels, kernel_size, stride, padding;
-        Matrix weights;
+        Tensor4D weights;
         Vector bias;
-        Matrix weight_gradients;
+        Tensor4D weight_gradients;
         Vector bias_gradients;
 
     public:
         ConvolutionalLayer(size_t in_channels, size_t out_channels, size_t kernel_size,
                            size_t stride = 1, size_t padding = 0);
 
-        Matrix forward(const Matrix &input) override;
+        Tensor4D forward(const Tensor4D &input) override;
 
-        Matrix backward(const Matrix &input, const Matrix &output_gradient) override;
+        Tensor4D backward(const Tensor4D &input, const Tensor4D &output_gradient) override;
 
         void update_parameters(float learning_rate) override;
 
@@ -35,13 +36,13 @@ namespace nnm {
 
         [[nodiscard]] size_t get_output_size() const override;
 
-        [[nodiscard]] std::unique_ptr<Layer> clone() const override;
+        [[nodiscard]] std::unique_ptr<Layer<Tensor4D>> clone() const override;
 
-        void set_weights(const Matrix &new_weights);
+        void set_weights(const Tensor4D &new_weights);
 
         void set_bias(const Vector &new_bias);
 
-        [[nodiscard]] const Matrix &get_weights() const { return weights; }
+        [[nodiscard]] const Tensor4D &get_weights() const { return weights; }
 
         [[nodiscard]] const Vector &get_bias() const { return bias; }
 
@@ -51,7 +52,7 @@ namespace nnm {
 
         [[nodiscard]] size_t get_stride() const { return stride; }
 
-        Matrix add_padding(const Matrix &input) const;
+        Tensor4D add_padding(const Tensor4D &input) const;
     };
 
 } // namespace nnm
