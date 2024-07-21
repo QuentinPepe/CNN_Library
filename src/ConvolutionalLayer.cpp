@@ -79,23 +79,6 @@ namespace nnm {
         return output;
     }
 
-
-    Tensor4D ConvolutionalLayer::backward(const Tensor4D &input, const Tensor4D &output_gradient) {
-        throw std::runtime_error("Not implemented");
-    }
-
-    void ConvolutionalLayer::update_parameters(float learning_rate) {
-        // Implement update_parameters functionality
-    }
-
-    void ConvolutionalLayer::save(std::ostream &os) const {
-        // Implement save functionality
-    }
-
-    void ConvolutionalLayer::load(std::istream &is) {
-        // Implement load functionality
-    }
-
     std::string ConvolutionalLayer::get_name() const {
         return "ConvolutionalLayer";
     }
@@ -116,8 +99,16 @@ namespace nnm {
         bias = new_bias;
     }
 
-    std::unique_ptr<Layer<Tensor4D>> ConvolutionalLayer::clone() const {
+    std::unique_ptr<Layer<Tensor4D, Tensor4D>> ConvolutionalLayer::clone() const {
         return std::make_unique<ConvolutionalLayer>(*this);
+    }
+
+    Tensor4D ConvolutionalLayer::get_weight_gradients() {
+        return weight_gradients;
+    }
+
+    Vector ConvolutionalLayer::get_bias_gradients() {
+        return bias_gradients;
     }
 
 

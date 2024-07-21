@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include "ConvolutionalLayer.h"
+#include "MaxPoolingLayer.h"
 #include "Vector.h"
 #include "Tensor4D.h"
 #include <cmath>
@@ -7,9 +7,9 @@
 
 namespace nnm {
 
-    class ConvolutionalLayerTest : public ::testing::Test {
+    class MaxPoolingLayerTest : public ::testing::Test {
     protected:
-        static constexpr float epsilon = 1e-2f;
+        static constexpr float epsilon = 1e-3f;
 
         static float absolute_error(const Tensor4D &x, const Tensor4D &y) {
             if (x.getBatchSize() != y.getBatchSize() || x.getChannels() != y.getChannels() ||
@@ -46,44 +46,21 @@ namespace nnm {
             }
             return result;
         }
-
-        static Vector linspace_vector(float start, float end, size_t num) {
-            Vector result(num);
-            float step = (end - start) / (num - 1);
-            for (size_t i = 0; i < num; ++i) {
-                result[i] = start + i * step;
-            }
-            return result;
-        }
     };
 
-    TEST_F(ConvolutionalLayerTest, ForwardPassTest) {
-        // Define shapes for input data, weights and biases
-        std::vector<size_t> x_shape = {1, 3, 4, 4};
-        std::vector<size_t> w_shape = {3, 3, 4, 4};
-        size_t b_shape = 3;
+    TEST_F(MaxPoolingLayerTest, ForwardPassTest) {
+        // Define shapes for input data
+        std::vector<size_t> x_shape = {2, 1, 4, 4};
 
         // Generate data
         Tensor4D x = linspace_tensor4d(0, 255, x_shape);
-        Tensor4D w = linspace_tensor4d(-1.0, 1.0, w_shape);
-        Vector b = linspace_vector(-1.0, 1.0, b_shape);
-
 
         // Print input data for debugging
         std::cout << "Input x:" << std::endl;
         x.print();
-        std::cout << "Weights w:" << std::endl;
-        w.print();
-        std::cout << "Bias b:" << std::endl;
-        for (size_t i = 0; i < b.size(); ++i) {
-            std::cout << b[i] << " ";
-        }
-        std::cout << std::endl;
 
-        // Create ConvolutionalLayer
-        ConvolutionalLayer layer(3, 3, 4, 2, 1);
-        layer.set_weights(w);
-        layer.set_bias(b);
+        // Create MaxPoolingLayer
+        MaxPoolingLayer layer(2, 2, 2);
 
         // Perform forward pass
         Tensor4D out = layer.forward(x);
@@ -93,26 +70,22 @@ namespace nnm {
         out.print();
 
         // Define correct output
-        Tensor4D correct_out(1, 3, 2, 2);
-        correct_out(0, 0, 0, 0) = -1585.7484f;
-        correct_out(0, 0, 0, 1) = -1724.0426f;
-        correct_out(0, 0, 1, 0) = -2163.5107f;
-        correct_out(0, 0, 1, 1) = -2318.1953f;
-        correct_out(0, 1, 0, 0) = 480.44412f;
-        correct_out(0, 1, 0, 1) = 440.4925f;
-        correct_out(0, 1, 1, 0) = 296.05194f;
-        correct_out(0, 1, 1, 1) = 239.70985f;
-        correct_out(0, 2, 0, 0) = 2546.6365f;
-        correct_out(0, 2, 0, 1) = 2605.0276f;
-        correct_out(0, 2, 1, 0) = 2755.6147f;
-        correct_out(0, 2, 1, 1) = 2797.6147f;
+        Tensor4D correct_out(2, 1, 2, 2);
+        correct_out(0, 0, 0, 0) = 41.12903226f;
+        correct_out(0, 0, 0, 1) = 57.58064516f;
+        correct_out(0, 0, 1, 0) = 106.93548387f;
+        correct_out(0, 0, 1, 1) = 123.38709677f;
+        correct_out(1, 0, 0, 0) = 172.74193548f;
+        correct_out(1, 0, 0, 1) = 189.19354839f;
+        correct_out(1, 0, 1, 0) = 238.5483871f;
+        correct_out(1, 0, 1, 1) = 255.0f;
 
         std::cout << "Correct output:" << std::endl;
         correct_out.print();
 
         // Check output shape
-        EXPECT_EQ(out.getBatchSize(), 1);
-        EXPECT_EQ(out.getChannels(), 3);
+        EXPECT_EQ(out.getBatchSize(), 2);
+        EXPECT_EQ(out.getChannels(), 1);
         EXPECT_EQ(out.getHeight(), 2);
         EXPECT_EQ(out.getWidth(), 2);
 

@@ -9,6 +9,12 @@ if (GTEST_FOUND)
             test_convolutional_layer.cpp
             test_matrix_convolutional.cpp
             test_tensor4d.cpp
+            test_max_pooling.cpp
+            test_fully_connected.cpp
+            test_relu_layer.cpp
+            test_loss_fuctions.cpp
+            test_batch_norm_2d_layer.cpp
+            test_linear_layer.cpp
     )
 
     # Link the test executable with Google Test, our Game library, and nlohmann_json

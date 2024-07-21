@@ -1,5 +1,5 @@
-/*-- File: ConvolutionalLayer.cpp start --*/
-/*-- #include "ConvolutionalLayer.h" start --*/
+/*-- #include "BatchNormalizationLayer.h" start --*/
+// BatchNormalizationLayer.h
 
 /*-- #include "Layer.h" start --*/
 
@@ -9,20 +9,12 @@
 
 namespace nnm {
 
-    template<typename T>
+    template<typename InputType, typename OutputType>
     class Layer {
     public:
         virtual ~Layer() = default;
 
-        virtual T forward(const T &input) = 0;
-
-        virtual T backward(const T &input, const T &output_gradient) = 0;
-
-        virtual void update_parameters(float learning_rate) = 0;
-
-        virtual void save(std::ostream &os) const = 0;
-
-        virtual void load(std::istream &is) = 0;
+        virtual OutputType forward(const InputType &input) = 0;
 
         virtual std::string get_name() const = 0;
 
@@ -30,7 +22,7 @@ namespace nnm {
 
         virtual size_t get_output_size() const = 0;
 
-        virtual std::unique_ptr<Layer<T>> clone() const = 0;
+        virtual std::unique_ptr<Layer<InputType, OutputType>> clone() const = 0;
     };
 
 } // namespace nnm
@@ -54,6 +46,136 @@ namespace nnm {
 #include <iostream>
 #include <cmath>
 #include <numeric>
+/*-- #include "Vector.h" start --*/
+
+#include <vector>
+#include <stdexcept>
+#include <algorithm>
+#include <numeric>
+#include <immintrin.h>
+#include <cmath>
+
+namespace nnm {
+
+    class Vector {
+    private:
+        alignas(32) std::vector<float> data;
+
+    public:
+        explicit Vector(size_t size) : data(size) {}
+
+        Vector(size_t size, float initial_value) : data(size, initial_value) {}
+
+        Vector(std::initializer_list<float> init) : data(init) {}
+
+        float &operator[](size_t index) {
+            return data[index];
+        }
+
+        const float &operator[](size_t index) const {
+            return data[index];
+        }
+
+        [[nodiscard]] size_t size() const {
+            return data.size();
+        }
+
+        Vector operator+(const Vector &other) const {
+            if (size() != other.size()) {
+                throw std::invalid_argument("Vector sizes do not match for addition");
+            }
+
+            Vector result(size());
+            size_t i = 0;
+
+            // Use AVX2 operations for blocks of 8 elements
+            for (; i + 8 <= size(); i += 8) {
+                __m256 a = _mm256_loadu_ps(&data[i]);
+                __m256 b = _mm256_loadu_ps(&other.data[i]);
+                __m256 sum = _mm256_add_ps(a, b);
+                _mm256_storeu_ps(&result.data[i], sum);
+            }
+
+            // Handle the remaining elements
+            for (; i < size(); ++i) {
+                result[i] = data[i] + other[i];
+            }
+
+            return result;
+        }
+
+        [[nodiscard]] float dot(const Vector &other) const {
+            if (size() != other.size()) {
+                throw std::invalid_argument("Vector sizes do not match for dot product");
+            }
+
+            __m256 sum = _mm256_setzero_ps();
+            size_t i = 0;
+
+            // Use AVX2 operations for blocks of 8 elements
+            for (; i + 8 <= size(); i += 8) {
+                __m256 a = _mm256_loadu_ps(&data[i]);
+                __m256 b = _mm256_loadu_ps(&other.data[i]);
+                sum = _mm256_add_ps(sum, _mm256_mul_ps(a, b));
+            }
+
+            // Sum the results from AVX2
+            float partial_sum[8];
+            _mm256_storeu_ps(partial_sum, sum);
+            float dot_product = partial_sum[0] + partial_sum[1] + partial_sum[2] + partial_sum[3] +
+                                partial_sum[4] + partial_sum[5] + partial_sum[6] + partial_sum[7];
+
+            // Handle the remaining elements
+            for (; i < size(); ++i) {
+                dot_product += data[i] * other[i];
+            }
+
+            return dot_product;
+        }
+
+        [[nodiscard]] float norm() const {
+            return std::sqrt(this->dot(*this));
+        }
+
+        Vector operator*(float scalar) const {
+            Vector result(size());
+            size_t i = 0;
+
+            // Use AVX2 operations for blocks of 8 elements
+            __m256 s = _mm256_set1_ps(scalar);
+            for (; i + 8 <= size(); i += 8) {
+                __m256 a = _mm256_loadu_ps(&data[i]);
+                __m256 product = _mm256_mul_ps(a, s);
+                _mm256_storeu_ps(&result.data[i], product);
+            }
+
+            // Handle the remaining elements
+            for (; i < size(); ++i) {
+                result[i] = data[i] * scalar;
+            }
+
+            return result;
+        }
+
+        void fill(float value) {
+            size_t i = 0;
+
+            // Use AVX2 operations for blocks of 8 elements
+            __m256 v = _mm256_set1_ps(value);
+            for (; i + 8 <= size(); i += 8) {
+                _mm256_storeu_ps(&data[i], v);
+            }
+
+            // Handle the remaining elements
+            for (; i < size(); ++i) {
+                data[i] = value;
+            }
+        }
+
+    };
+
+} // namespace nnm
+
 
 namespace nnm {
     class Matrix {
@@ -270,6 +392,22 @@ namespace nnm {
 
         std::vector<float> &getData() { return data; }
 
+        Vector operator*(const Vector &vec) const {
+            if (cols != vec.size()) {
+                throw std::invalid_argument("Matrix and vector dimensions do not match for multiplication");
+            }
+
+            Vector result(rows);
+            for (size_t i = 0; i < rows; ++i) {
+                float sum = 0.0f;
+                for (size_t j = 0; j < cols; ++j) {
+                    sum += (*this)(i, j) * vec[j];
+                }
+                result[i] = sum;
+            }
+            return result;
+        }
+
     };
 } // namespace nnm
 
@@ -335,6 +473,14 @@ namespace nnm {
 
         float sum() const {
             return std::accumulate(data.begin(), data.end(), 0.0f);
+        }
+
+        float max() const {
+            return *std::max_element(data.begin(), data.end());
+        }
+
+        float mean() const {
+            return std::accumulate(data.begin(), data.end(), 0.0f) / static_cast<float>(data.size());
         }
 
         void fill(float value) {
@@ -477,141 +623,55 @@ namespace nnm {
         std::vector<float> &getData() { return data; }
     };
 } // namespace nnm
-/*-- #include "Matrix.h" start --*/
 /*-- #include "Vector.h" start --*/
 
-#include <vector>
-#include <stdexcept>
-#include <algorithm>
-#include <numeric>
-#include <immintrin.h>
-#include <cmath>
-
 namespace nnm {
-
-    class Vector {
+    class BatchNormalizationLayer : public Layer<Tensor4D, Tensor4D> {
     private:
-        alignas(32) std::vector<float> data;
+        size_t num_features;
+        float epsilon;
+        float momentum;
+        Vector running_mean;
+        Vector running_var;
+        Vector gamma;
+        Vector beta;
 
     public:
-        explicit Vector(size_t size) : data(size) {}
+        BatchNormalizationLayer(size_t num_features, float epsilon = 1e-5, float momentum = 0.1)
+                : num_features(num_features), epsilon(epsilon), momentum(momentum),
+                  running_mean(num_features), running_var(num_features),
+                  gamma(num_features, 1.0f), beta(num_features, 0.0f) {}
 
-        Vector(size_t size, float initial_value) : data(size, initial_value) {}
-
-        Vector(std::initializer_list<float> init) : data(init) {}
-
-        float &operator[](size_t index) {
-            return data[index];
+        Tensor4D forward(const Tensor4D &input) override {
+            // Implémentez ici la logique de forward pass pour la normalisation par lots
+            // Utilisez running_mean et running_var pour l'inférence
+            // ...
+            return input; // Placeholder, remplacez par la vraie implémentation
         }
 
-        const float &operator[](size_t index) const {
-            return data[index];
-        }
+        std::string get_name() const override { return "BatchNormalizationLayer"; }
 
-        [[nodiscard]] size_t size() const {
-            return data.size();
-        }
+        size_t get_input_size() const override { return num_features; }
 
-        Vector operator+(const Vector &other) const {
-            if (size() != other.size()) {
-                throw std::invalid_argument("Vector sizes do not match for addition");
-            }
+        size_t get_output_size() const override { return num_features; }
 
-            Vector result(size());
-            size_t i = 0;
-
-            // Use AVX2 operations for blocks of 8 elements
-            for (; i + 8 <= size(); i += 8) {
-                __m256 a = _mm256_loadu_ps(&data[i]);
-                __m256 b = _mm256_loadu_ps(&other.data[i]);
-                __m256 sum = _mm256_add_ps(a, b);
-                _mm256_storeu_ps(&result.data[i], sum);
-            }
-
-            // Handle the remaining elements
-            for (; i < size(); ++i) {
-                result[i] = data[i] + other[i];
-            }
-
-            return result;
-        }
-
-        [[nodiscard]] float dot(const Vector &other) const {
-            if (size() != other.size()) {
-                throw std::invalid_argument("Vector sizes do not match for dot product");
-            }
-
-            __m256 sum = _mm256_setzero_ps();
-            size_t i = 0;
-
-            // Use AVX2 operations for blocks of 8 elements
-            for (; i + 8 <= size(); i += 8) {
-                __m256 a = _mm256_loadu_ps(&data[i]);
-                __m256 b = _mm256_loadu_ps(&other.data[i]);
-                sum = _mm256_add_ps(sum, _mm256_mul_ps(a, b));
-            }
-
-            // Sum the results from AVX2
-            float partial_sum[8];
-            _mm256_storeu_ps(partial_sum, sum);
-            float dot_product = partial_sum[0] + partial_sum[1] + partial_sum[2] + partial_sum[3] +
-                                partial_sum[4] + partial_sum[5] + partial_sum[6] + partial_sum[7];
-
-            // Handle the remaining elements
-            for (; i < size(); ++i) {
-                dot_product += data[i] * other[i];
-            }
-
-            return dot_product;
-        }
-
-        [[nodiscard]] float norm() const {
-            return std::sqrt(this->dot(*this));
-        }
-
-        Vector operator*(float scalar) const {
-            Vector result(size());
-            size_t i = 0;
-
-            // Use AVX2 operations for blocks of 8 elements
-            __m256 s = _mm256_set1_ps(scalar);
-            for (; i + 8 <= size(); i += 8) {
-                __m256 a = _mm256_loadu_ps(&data[i]);
-                __m256 product = _mm256_mul_ps(a, s);
-                _mm256_storeu_ps(&result.data[i], product);
-            }
-
-            // Handle the remaining elements
-            for (; i < size(); ++i) {
-                result[i] = data[i] * scalar;
-            }
-
-            return result;
-        }
-
-        void fill(float value) {
-            size_t i = 0;
-
-            // Use AVX2 operations for blocks of 8 elements
-            __m256 v = _mm256_set1_ps(value);
-            for (; i + 8 <= size(); i += 8) {
-                _mm256_storeu_ps(&data[i], v);
-            }
-
-            // Handle the remaining elements
-            for (; i < size(); ++i) {
-                data[i] = value;
-            }
+        std::unique_ptr<Layer<Tensor4D, Tensor4D>> clone() const override {
+            return std::make_unique<BatchNormalizationLayer>(*this);
         }
     };
+}
+/*-- File: ConvolutionalLayer.cpp start --*/
+/*-- #include "ConvolutionalLayer.h" start --*/
 
-} // namespace nnm
-
+/*-- #include "Layer.h" start --*/
+/*-- #include "Tensor4D.h" start --*/
+/*-- #include "Matrix.h" start --*/
+/*-- #include "Vector.h" start --*/
 #include <random>
 
 namespace nnm {
 
-    class ConvolutionalLayer : public Layer<Tensor4D> {
+    class ConvolutionalLayer : public Layer<Tensor4D, Tensor4D> {
     private:
         size_t in_channels, out_channels, kernel_size, stride, padding;
         Tensor4D weights;
@@ -625,21 +685,13 @@ namespace nnm {
 
         Tensor4D forward(const Tensor4D &input) override;
 
-        Tensor4D backward(const Tensor4D &input, const Tensor4D &output_gradient) override;
-
-        void update_parameters(float learning_rate) override;
-
-        void save(std::ostream &os) const override;
-
-        void load(std::istream &is) override;
-
         [[nodiscard]] std::string get_name() const override;
 
         [[nodiscard]] size_t get_input_size() const override;
 
         [[nodiscard]] size_t get_output_size() const override;
 
-        [[nodiscard]] std::unique_ptr<Layer<Tensor4D>> clone() const override;
+        [[nodiscard]] std::unique_ptr<Layer<Tensor4D, Tensor4D>> clone() const override;
 
         void set_weights(const Tensor4D &new_weights);
 
@@ -654,6 +706,10 @@ namespace nnm {
         [[nodiscard]] size_t get_kernel_size() const { return kernel_size; }
 
         [[nodiscard]] size_t get_stride() const { return stride; }
+
+        Tensor4D get_weight_gradients();
+
+        Vector get_bias_gradients();
     };
 
 } // namespace nnm
@@ -737,23 +793,6 @@ namespace nnm {
         return output;
     }
 
-
-    Tensor4D ConvolutionalLayer::backward(const Tensor4D &input, const Tensor4D &output_gradient) {
-        throw std::runtime_error("Not implemented");
-    }
-
-    void ConvolutionalLayer::update_parameters(float learning_rate) {
-        // Implement update_parameters functionality
-    }
-
-    void ConvolutionalLayer::save(std::ostream &os) const {
-        // Implement save functionality
-    }
-
-    void ConvolutionalLayer::load(std::istream &is) {
-        // Implement load functionality
-    }
-
     std::string ConvolutionalLayer::get_name() const {
         return "ConvolutionalLayer";
     }
@@ -774,8 +813,16 @@ namespace nnm {
         bias = new_bias;
     }
 
-    std::unique_ptr<Layer<Tensor4D>> ConvolutionalLayer::clone() const {
+    std::unique_ptr<Layer<Tensor4D, Tensor4D>> ConvolutionalLayer::clone() const {
         return std::make_unique<ConvolutionalLayer>(*this);
+    }
+
+    Tensor4D ConvolutionalLayer::get_weight_gradients() {
+        return weight_gradients;
+    }
+
+    Vector ConvolutionalLayer::get_bias_gradients() {
+        return bias_gradients;
     }
 
 
@@ -783,517 +830,392 @@ namespace nnm {
 
 /*-- File: ConvolutionalLayer.cpp end --*/
 /*-- #include "ConvolutionalLayer.h" start --*/
+/*-- #include "FullyConnectedLayer.h" start --*/
+
 /*-- #include "Layer.h" start --*/
-/*-- #include "Matrix.h" start --*/
 /*-- #include "Tensor4D.h" start --*/
+/*-- #include "Matrix.h" start --*/
 /*-- #include "Vector.h" start --*/
-/*-- File: main.cpp start --*/
-#include <iostream>
-#include <string>
-#include <vector>
-#include <algorithm>
-#include <random>
-#include <ctime>
 #include <cmath>
-#include <memory>
 
-using namespace std;
-
-enum Action {
-    UP, RIGHT, DOWN, LEFT
-};
-
-class MiniGame {
-public:
-    virtual void reset(mt19937 &rng) = 0;
-
-    virtual string getGPU() = 0;
-
-    virtual vector<int> getRegisters() = 0;
-
-    virtual void tick(const vector<Action> &actions) = 0;
-
-    virtual bool isGameOver() = 0;
-
-    virtual vector<int> getRankings() = 0;
-
-    virtual string getName() = 0;
-};
-
-class HurdleRace : public MiniGame {
-private:
-    string map;
-    vector<int> positions;
-    vector<int> stunTimers;
-    vector<bool> dead;
-    vector<bool> jumped;
-    vector<int> finished;
-    int rank;
-
-    const int STUN_DURATION = 2;
-
-public:
-    HurdleRace() : positions(3), stunTimers(3), dead(3, false), jumped(3, false), finished(3, -1), rank(0) {}
-
-    void reset(mt19937 &rng) override {
-        uniform_int_distribution<> distStart(3, 7);
-        uniform_int_distribution<> distHurdles(3, 6);
-        uniform_int_distribution<> distBool(0, 1);
-
-        int startStretch = distStart(rng);
-        int hurdles = distHurdles(rng);
-        int length = 30;
-
-        map.clear();
-        map.append(startStretch, '.');
-        for (int i = 0; i < hurdles; ++i) {
-            map += distBool(rng) ? "#...." : "#...";
-        }
-        map.append(length - map.length(), '.');
-        map.back() = '.';
-
-        fill(positions.begin(), positions.end(), 0);
-        fill(stunTimers.begin(), stunTimers.end(), 0);
-        fill(finished.begin(), finished.end(), -1);
-        fill(dead.begin(), dead.end(), false);
-        fill(jumped.begin(), jumped.end(), false);
-        rank = 0;
-    }
-
-    string getGPU() override { return map; }
-
-    vector<int> getRegisters() override {
-        vector<int> registers(8, -1);
-        copy(positions.begin(), positions.end(), registers.begin());
-        copy(stunTimers.begin(), stunTimers.end(), registers.begin() + 3);
-        return registers;
-    }
-
-    void tick(const vector<Action> &actions) override {
-        int maxX = map.length() - 1;
-        int countFinishes = 0;
-
-        for (int i = 0; i < 3; ++i) {
-            jumped[i] = false;
-
-            if (actions[i] == Action::UP) stunTimers[i] = max(0, stunTimers[i] - 1);
-            if (stunTimers[i] > 0 || finished[i] > -1) continue;
-
-            int moveBy = 0;
-            bool jump = false;
-
-            switch (actions[i]) {
-                case Action::DOWN:
-                    moveBy = 2;
-                    break;
-                case Action::LEFT:
-                    moveBy = 1;
-                    break;
-                case Action::RIGHT:
-                    moveBy = 3;
-                    break;
-                case Action::UP:
-                    moveBy = 2;
-                    jump = true;
-                    jumped[i] = true;
-                    break;
-            }
-
-            for (int x = 0; x < moveBy; ++x) {
-                positions[i] = min(maxX, positions[i] + 1);
-                if (map[positions[i]] == '#' && !jump) {
-                    stunTimers[i] = STUN_DURATION;
-                    break;
-                }
-                if (positions[i] == maxX && finished[i] == -1) {
-                    finished[i] = rank;
-                    countFinishes++;
-                    break;
-                }
-                jump = false;
-            }
-        }
-        rank += countFinishes;
-    }
-
-    bool isGameOver() override {
-        int count = 0;
-        for (int i = 0; i < 3; ++i) {
-            if (finished[i] > -1) return true;
-            if (finished[i] > -1 || dead[i]) count++;
-        }
-        return count >= 2;
-    }
-
-    vector<int> getRankings() override {
-        vector<int> rankings(3);
-        for (int i = 0; i < 3; ++i) {
-            rankings[i] = (finished[i] == -1) ? rank : finished[i];
-        }
-        return rankings;
-    }
-
-    string getName() override { return "Hurdle Race"; }
-};
-
-class Archery : public MiniGame {
-private:
-    vector<vector<int>> cursors;
-    vector<int> wind;
-    vector<bool> dead;
-
-public:
-    Archery() : cursors(3, vector<int>(2)), dead(3, false) {}
-
-    void reset(mt19937 &rng) override {
-        uniform_int_distribution<> distPos(5, 9);
-        uniform_int_distribution<> distSign(0, 1);
-        uniform_int_distribution<> distRounds(12, 15);
-        uniform_int_distribution<> distWind(0, 9);
-
-        int x = distPos(rng) * (distSign(rng) ? 1 : -1);
-        int y = distPos(rng) * (distSign(rng) ? 1 : -1);
-        for (auto &cursor: cursors) {
-            cursor[0] = x;
-            cursor[1] = y;
-        }
-
-        wind.clear();
-        int rounds = distRounds(rng);
-        for (int i = 0; i < rounds; ++i) {
-            wind.push_back(distWind(rng));
-        }
-
-        fill(dead.begin(), dead.end(), false);
-    }
-
-    string getGPU() override {
-        string gpu;
-        for (int w: wind) gpu += to_string(w);
-        return gpu;
-    }
-
-    vector<int> getRegisters() override {
-        vector<int> registers(8, -1);
-        for (int i = 0; i < 3; ++i) {
-            registers[i * 2] = cursors[i][0];
-            registers[i * 2 + 1] = cursors[i][1];
-        }
-        return registers;
-    }
-
-    void tick(const vector<Action> &actions) override {
-        int offset = wind[0];
-        for (int i = 0; i < 3; ++i) {
-            if (actions[i] == Action::UP) {
-                dead[i] = true;
-                continue;
-            }
-
-            int dx = 0, dy = 0;
-            switch (actions[i]) {
-                case Action::DOWN:
-                    dy = offset;
-                    break;
-                case Action::LEFT:
-                    dx = -offset;
-                    break;
-                case Action::RIGHT:
-                    dx = offset;
-                    break;
-                case Action::UP:
-                    dy = -offset;
-                    break;
-            }
-
-            cursors[i][0] = clamp(cursors[i][0] + dx, -20, 20);
-            cursors[i][1] = clamp(cursors[i][1] + dy, -20, 20);
-        }
-        wind.erase(wind.begin());
-    }
-
-    bool isGameOver() override { return wind.empty(); }
-
-    vector<int> getRankings() override {
-        vector<pair<int, double>> scores;
-        for (int i = 0; i < 3; ++i) {
-            double distance = sqrt(pow(cursors[i][0], 2) + pow(cursors[i][1], 2));
-            scores.emplace_back(i, dead[i] ? numeric_limits<double>::max() : distance);
-        }
-        sort(scores.begin(), scores.end(), [](const auto &a, const auto &b) { return a.second < b.second; });
-
-        vector<int> rankings(3);
-        for (int i = 0; i < 3; ++i) {
-            rankings[scores[i].first] = i;
-        }
-        return rankings;
-    }
-
-    string getName() override { return "Archery"; }
-};
-
-class Diving : public MiniGame {
-private:
-    string goal;
-    vector<int> points;
-    vector<int> combo;
-    vector<bool> dead;
-    int turnsRemaining;
-
-public:
-    Diving() : points(3, 0), combo(3, 0), dead(3, false), turnsRemaining(0) {}
-
-    void reset(mt19937 &rng) override {
-        uniform_int_distribution<> distLength(12, 15);
-        uniform_int_distribution<> distAction(0, 3);
-
-        int length = distLength(rng);
-        goal.clear();
-        for (int i = 0; i < length; ++i) {
-            goal += "UDLR"[distAction(rng)];
-        }
-
-        fill(points.begin(), points.end(), 0);
-        fill(combo.begin(), combo.end(), 0);
-        fill(dead.begin(), dead.end(), false);
-        turnsRemaining = length + 1;
-    }
-
-    string getGPU() override { return goal; }
-
-    vector<int> getRegisters() override {
-        vector<int> registers(8, -1);
-        copy(points.begin(), points.end(), registers.begin());
-        copy(combo.begin(), combo.end(), registers.begin() + 3);
-        return registers;
-    }
-
-    void tick(const vector<Action> &actions) override {
-        for (int i = 0; i < 3; ++i) {
-            if (actions[i] == Action::UP) {
-                dead[i] = true;
-                continue;
-            }
-
-            if (goal[0] == "UDLR"[static_cast<int>(actions[i])]) {
-                combo[i]++;
-                points[i] += combo[i];
-            } else {
-                combo[i] = 0;
-            }
-        }
-        goal.erase(0, 1);
-        turnsRemaining--;
-    }
-
-    bool isGameOver() override { return goal.empty(); }
-
-    vector<int> getRankings() override {
-        vector<pair<int, int>> scores;
-        for (int i = 0; i < 3; ++i) {
-            scores.emplace_back(i, dead[i] ? -1 : points[i]);
-        }
-        sort(scores.begin(), scores.end(), [](const auto &a, const auto &b) { return a.second > b.second; });
-
-        vector<int> rankings(3);
-        for (int i = 0; i < 3; ++i) {
-            rankings[scores[i].first] = i;
-        }
-        return rankings;
-    }
-
-    string getName() override { return "Diving"; }
-};
-
-class RollerSpeedSkating : public MiniGame {
-private:
-    vector<int> positions;
-    vector<int> risk;
-    vector<bool> dead;
-    vector<Action> directions;
-    int length, timer;
-
-public:
-    RollerSpeedSkating() : positions(3, 0), risk(3, 0), dead(3, false), length(10), timer(15) {
-        directions = {Action::UP, Action::DOWN, Action::LEFT, Action::RIGHT};
-    }
-
-    void reset(mt19937 &rng) override {
-        fill(positions.begin(), positions.end(), 0);
-        fill(risk.begin(), risk.end(), 0);
-        fill(dead.begin(), dead.end(), false);
-        shuffle(directions.begin(), directions.end(), rng);
-        timer = 15;
-    }
-
-    string getGPU() override {
-        string gpu;
-        for (Action dir: directions) {
-            gpu += "UDLR"[static_cast<int>(dir)];
-        }
-        return gpu;
-    }
-
-    vector<int> getRegisters() override {
-        vector<int> registers(8, -1);
-        copy(positions.begin(), positions.end(), registers.begin());
-        copy(risk.begin(), risk.end(), registers.begin() + 3);
-        registers[6] = timer;
-        return registers;
-    }
-
-    void tick(const vector<Action> &actions) override {
-        for (int i = 0; i < 3; ++i) {
-            if (actions[i] == Action::UP) {
-                dead[i] = true;
-                continue;
-            }
-
-            if (risk[i] < 0) {
-                risk[i]++;
-                continue;
-            }
-
-            int idx = find(directions.begin(), directions.end(), actions[i]) - directions.begin();
-            int dx = (idx == 0) ? 1 : (idx == 3) ? 3 : 2;
-
-            positions[i] += dx;
-            int riskValue = -1 + idx;
-            risk[i] = max(0, risk[i] + riskValue);
-        }
-
-        for (int i = 0; i < 3; ++i) {
-            if (risk[i] < 0) continue;
-
-            bool clash = false;
-            for (int k = 0; k < 3; ++k) {
-                if (k == i) continue;
-                if (positions[k] % length == positions[i] % length) {
-                    clash = true;
-                    break;
+namespace nnm {
+
+    class FullyConnectedLayer : public Layer<Tensor4D, Matrix> {
+    private:
+        Matrix weights;
+        Vector biases;
+        size_t input_size;
+        size_t output_size;
+
+    public:
+        FullyConnectedLayer(size_t input_size, size_t output_size)
+                : input_size(input_size), output_size(output_size),
+                  weights(input_size, output_size), biases(output_size) {
+            // Initialize weights and biases (you might want to use a better initialization)
+            for (size_t i = 0; i < input_size; ++i) {
+                for (size_t j = 0; j < output_size; ++j) {
+                    weights(i, j) = static_cast<float>(rand()) / RAND_MAX - 0.5f;
                 }
             }
-            if (clash) risk[i] += 2;
-
-            if (risk[i] >= 5) risk[i] = -2; // stun
+            for (size_t i = 0; i < output_size; ++i) {
+                biases[i] = static_cast<float>(rand()) / RAND_MAX - 0.5f;
+            }
         }
 
-        shuffle(directions.begin(), directions.end(), mt19937(time(0)));
-        timer--;
-    }
+        Matrix forward(const Tensor4D &x) override {
+            size_t N = x.getBatchSize();
+            size_t D = x.getChannels() * x.getHeight() * x.getWidth();
 
-    bool isGameOver() override { return timer <= 0; }
-
-    vector<int> getRankings() override {
-        vector<pair<int, int>> scores;
-        for (int i = 0; i < 3; ++i) {
-            scores.emplace_back(i, dead[i] ? -1 : positions[i]);
-        }
-        sort(scores.begin(), scores.end(), [](const auto &a, const auto &b) { return a.second > b.second; });
-
-        vector<int> rankings(3);
-        for (int i = 0; i < 3; ++i) {
-            rankings[scores[i].first] = i;
-        }
-        return rankings;
-    }
-
-    string getName() override { return "Roller Speed Skating"; }
-};
-
-class Game {
-private:
-    int playerIdx;
-    vector<unique_ptr<MiniGame>> games;
-    vector<vector<int>> medals;
-    mt19937 rng;
-
-public:
-    Game(int playerIdx) : playerIdx(playerIdx), medals(4, vector<int>(3, 0)), rng(time(0)) {
-        games.push_back(make_unique<HurdleRace>());
-        games.push_back(make_unique<Archery>());
-        games.push_back(make_unique<Diving>());
-        games.push_back(make_unique<RollerSpeedSkating>());
-
-        for (auto &game: games) {
-            game->reset(rng);
-        }
-    }
-
-    void run() {
-        while (true) {
-            vector<string> scoreInfo(3);
-            for (int i = 0; i < 3; i++) {
-                int score = 1;
-                for (int j = 0; j < 4; j++) {
-                    score *= medals[j][1] + medals[j][0] * 3;
-                }
-                scoreInfo[i] = to_string(score);
-                for (int j = 0; j < 4; j++) {
-                    scoreInfo[i] += " " + to_string(medals[j][0]) + " " + to_string(medals[j][1]) + " " +
-                                    to_string(medals[j][2]);
-                }
+            if (D != input_size) {
+                throw std::invalid_argument("Input size doesn't match the layer's input size");
             }
 
-            for (const auto &info: scoreInfo) {
-                cout << info << endl;
-            }
-
-            bool allGameOver = true;
-            for (const auto &game: games) {
-                cout << game->getGPU();
-                auto registers = game->getRegisters();
-                for (int reg: registers) {
-                    cout << " " << reg;
-                }
-                cout << endl;
-
-                if (!game->isGameOver()) {
-                    allGameOver = false;
-                }
-            }
-
-            if (allGameOver) {
-                break;
-            }
-
-            string action;
-            cin >> action;
-
-            vector<Action> actions(3);
-            if (action == "UP") actions[playerIdx] = Action::UP;
-            else if (action == "DOWN") actions[playerIdx] = Action::DOWN;
-            else if (action == "LEFT") actions[playerIdx] = Action::LEFT;
-            else if (action == "RIGHT") actions[playerIdx] = Action::RIGHT;
-
-            for (int i = 0; i < 3; i++) {
-                if (i != playerIdx) {
-                    actions[i] = static_cast<Action>(rand() % 4);
-                }
-            }
-
-            for (auto &game: games) {
-                if (!game->isGameOver()) {
-                    game->tick(actions);
-                    if (game->isGameOver()) {
-                        auto rankings = game->getRankings();
-                        for (int i = 0; i < 3; i++) {
-                            medals[&game - &games[0]][rankings[i]]++;
+            Matrix x_reshaped(N, D);
+            for (size_t n = 0; n < N; ++n) {
+                size_t index = 0;
+                for (size_t c = 0; c < x.getChannels(); ++c) {
+                    for (size_t h = 0; h < x.getHeight(); ++h) {
+                        for (size_t w = 0; w < x.getWidth(); ++w) {
+                            x_reshaped(n, index++) = x(n, c, h, w);
                         }
                     }
                 }
             }
+
+            Matrix fc_output = x_reshaped * weights;
+            for (size_t n = 0; n < N; ++n) {
+                for (size_t m = 0; m < output_size; ++m) {
+                    fc_output(n, m) += biases[m];
+                }
+            }
+
+            return fc_output;
         }
-    }
-};
+
+        std::string get_name() const override {
+            return "FullyConnectedLayer";
+        }
+
+        size_t get_input_size() const override {
+            return input_size;
+        }
+
+        size_t get_output_size() const override {
+            return output_size;
+        }
+
+        std::unique_ptr<Layer<Tensor4D, Matrix>> clone() const override {
+            return std::make_unique<FullyConnectedLayer>(*this);
+        }
+
+        void set_weights(const Matrix &new_weights) {
+            if (new_weights.getRows() != input_size || new_weights.getCols() != output_size) {
+                throw std::invalid_argument("New weights dimensions don't match the layer's dimensions");
+            }
+            weights = new_weights;
+        }
+
+        void set_biases(const Vector &new_biases) {
+            if (new_biases.size() != output_size) {
+                throw std::invalid_argument("New biases size doesn't match the layer's output size");
+            }
+            biases = new_biases;
+        }
+
+        const Matrix &get_weights() const { return weights; }
+
+        const Vector &get_biases() const { return biases; }
+    };
+
+} // namespace nnm
+/*-- #include "Layer.h" start --*/
+/*-- #include "LinearLayer.h" start --*/
+
+/*-- #include "Layer.h" start --*/
+/*-- #include "Matrix.h" start --*/
+/*-- #include "Vector.h" start --*/
+#include <random>
+
+namespace nnm {
+
+    class LinearLayer : public Layer<Vector, Vector> {
+    private:
+        Matrix weights;
+        Vector bias;
+        size_t in_features;
+        size_t out_features;
+
+    public:
+        LinearLayer(size_t in_features, size_t out_features)
+                : in_features(in_features), out_features(out_features),
+                  weights(out_features, in_features), bias(out_features) {
+
+            // Xavier/Glorot initialization
+            std::random_device rd;
+            std::mt19937 gen(rd());
+            std::uniform_real_distribution<> dis(-1.0 / std::sqrt(in_features), 1.0 / std::sqrt(in_features));
+
+            for (size_t i = 0; i < out_features; ++i) {
+                for (size_t j = 0; j < in_features; ++j) {
+                    weights(i, j) = dis(gen);
+                }
+                bias[i] = 0.0f; // Initialize bias to zero
+            }
+        }
+
+        Vector forward(const Vector &input) override {
+            if (input.size() != in_features) {
+                throw std::invalid_argument("Input size does not match layer input features");
+            }
+            return weights * input + bias;
+        }
+
+        std::string get_name() const override {
+            return "LinearLayer";
+        }
+
+        size_t get_input_size() const override {
+            return in_features;
+        }
+
+        size_t get_output_size() const override {
+            return out_features;
+        }
+
+        std::unique_ptr<Layer<Vector, Vector>> clone() const override {
+            return std::make_unique<LinearLayer>(*this);
+        }
+
+        const Matrix &get_weights() const {
+            return weights;
+        }
+
+        const Vector &get_bias() const {
+            return bias;
+        }
+
+        void set_weights(const Matrix &new_weights) {
+            if (new_weights.getRows() != out_features || new_weights.getCols() != in_features) {
+                throw std::invalid_argument("New weights dimensions do not match layer dimensions");
+            }
+            weights = new_weights;
+        }
+
+        void set_bias(const Vector &new_bias) {
+            if (new_bias.size() != out_features) {
+                throw std::invalid_argument("New bias size does not match layer output features");
+            }
+            bias = new_bias;
+        }
+    };
+
+} // namespace nnm
+/*-- #include "LossFunctions.h" start --*/
+
+/*-- #include "Matrix.h" start --*/
+/*-- #include "Vector.h" start --*/
+#include <cmath>
+#include <limits>
+#include <stdexcept>
+
+namespace nnm {
+
+    class LossFunctions {
+    public:
+        struct SoftmaxLossResult {
+            float loss;
+            Matrix gradient;
+        };
+
+        static SoftmaxLossResult softmax_loss(const Matrix &x, const Vector &y) {
+            if (x.getRows() != y.size()) {
+                throw std::invalid_argument("Number of samples in x and y must match");
+            }
+
+            size_t N = x.getRows();
+            size_t C = x.getCols();
+
+            // Calculate shifted logits
+            Matrix shifted_logits(N, C);
+            for (size_t i = 0; i < N; ++i) {
+                float max_val = -std::numeric_limits<float>::max();
+                for (size_t j = 0; j < C; ++j) {
+                    max_val = std::max(max_val, x(i, j));
+                }
+                for (size_t j = 0; j < C; ++j) {
+                    shifted_logits(i, j) = x(i, j) - max_val;
+                }
+            }
+
+            // Calculate sum of exp(shifted_logits)
+            Vector z(N);
+            for (size_t i = 0; i < N; ++i) {
+                float sum = 0.0f;
+                for (size_t j = 0; j < C; ++j) {
+                    sum += std::exp(shifted_logits(i, j));
+                }
+                z[i] = sum;
+            }
+
+            // Calculate log probabilities and probabilities
+            Matrix log_probs(N, C);
+            Matrix probs(N, C);
+            for (size_t i = 0; i < N; ++i) {
+                for (size_t j = 0; j < C; ++j) {
+                    log_probs(i, j) = shifted_logits(i, j) - std::log(z[i]);
+                    probs(i, j) = std::exp(log_probs(i, j));
+                }
+            }
+
+            // Calculate loss
+            float loss = 0.0f;
+            for (size_t i = 0; i < N; ++i) {
+                if (y[i] < 0 || y[i] >= C) {
+                    throw std::out_of_range("Label must be between 0 and C-1");
+                }
+                loss -= log_probs(i, static_cast<size_t>(y[i]));
+            }
+            loss /= N;
+
+            // Calculate gradient
+            Matrix dx = probs;
+            for (size_t i = 0; i < N; ++i) {
+                dx(i, static_cast<size_t>(y[i])) -= 1.0f;
+            }
+            for (size_t i = 0; i < N; ++i) {
+                for (size_t j = 0; j < C; ++j) {
+                    dx(i, j) /= N;
+                }
+            }
+
+            return {loss, dx};
+        }
+
+        // You can add other loss functions here as needed
+    };
+
+} // namespace nnm
+/*-- #include "Matrix.h" start --*/
+/*-- #include "MaxPoolingLayer.h" start --*/
+
+/*-- #include "Layer.h" start --*/
+/*-- #include "Tensor4D.h" start --*/
+#include <cmath>
+#include <algorithm>
+
+namespace nnm {
+
+    class MaxPoolingLayer : public Layer<Tensor4D, Tensor4D> {
+    private:
+        size_t pooling_height;
+        size_t pooling_width;
+        size_t stride;
+
+    public:
+        MaxPoolingLayer(size_t pooling_height, size_t pooling_width, size_t stride)
+                : pooling_height(pooling_height), pooling_width(pooling_width), stride(stride) {}
+
+        Tensor4D forward(const Tensor4D &x) override {
+            size_t N = x.getBatchSize();
+            size_t F = x.getChannels();
+            size_t H = x.getHeight();
+            size_t W = x.getWidth();
+
+            size_t height_pooled_out = 1 + (H - pooling_height) / stride;
+            size_t width_pooled_out = 1 + (W - pooling_width) / stride;
+
+            Tensor4D pooled_output(N, F, height_pooled_out, width_pooled_out);
+
+            for (size_t n = 0; n < N; ++n) {
+                for (size_t f = 0; f < F; ++f) {
+                    for (size_t i = 0; i < height_pooled_out; ++i) {
+                        for (size_t j = 0; j < width_pooled_out; ++j) {
+                            size_t ii = i * stride;
+                            size_t jj = j * stride;
+
+                            float max_val = std::numeric_limits<float>::lowest();
+                            for (size_t ph = 0; ph < pooling_height; ++ph) {
+                                for (size_t pw = 0; pw < pooling_width; ++pw) {
+                                    max_val = std::max(max_val, x(n, f, ii + ph, jj + pw));
+                                }
+                            }
+                            pooled_output(n, f, i, j) = max_val;
+                        }
+                    }
+                }
+            }
+
+            return pooled_output;
+        }
+
+        std::string get_name() const override {
+            return "MaxPoolingLayer";
+        }
+
+        size_t get_input_size() const override {
+            // This should return the input volume size, but it's not applicable for pooling layers
+            return 0;
+        }
+
+        size_t get_output_size() const override {
+            // This should return the output volume size, but it's not applicable for pooling layers
+            return 0;
+        }
+
+        std::unique_ptr<Layer<Tensor4D, Tensor4D>> clone() const override {
+            return std::make_unique<MaxPoolingLayer>(*this);
+        }
+    };
+
+} // namespace nnm
+/*-- #include "ReLULayer.h" start --*/
+
+/*-- #include "Layer.h" start --*/
+/*-- #include "Matrix.h" start --*/
+#include <algorithm>
+
+namespace nnm {
+
+    class ReLULayer : public Layer<Matrix, Matrix> {
+    public:
+        ReLULayer() = default;
+
+        Matrix forward(const Matrix &x) override {
+            Matrix relu_output(x.getRows(), x.getCols());
+            for (size_t i = 0; i < x.getRows(); ++i) {
+                for (size_t j = 0; j < x.getCols(); ++j) {
+                    relu_output(i, j) = std::max(0.0f, x(i, j));
+                }
+            }
+            return relu_output;
+        }
+
+        std::string get_name() const override {
+            return "ReLULayer";
+        }
+
+        size_t get_input_size() const override {
+            return 0;  // ReLU doesn't change the size
+        }
+
+        size_t get_output_size() const override {
+            return 0;  // ReLU doesn't change the size
+        }
+
+        std::unique_ptr<Layer<Matrix, Matrix>> clone() const override {
+            return std::make_unique<ReLULayer>(*this);
+        }
+    };
+
+} // namespace nnm
+/*-- #include "Tensor4D.h" start --*/
+/*-- #include "Vector.h" start --*/
+/*-- File: main.cpp start --*/
+#pragma GCC optimize("O3", "unroll-loops", "omit-frame-pointer") //Optimization flags
+#pragma GCC option("arch=native", "tune=native", "no-zero-upper") //Enable AVX
+#pragma GCC target("avx")  //Enable AVX
 
 int main() {
-    int playerIdx, nbGames;
-    cin >> playerIdx >> nbGames;
-
-    Game game(playerIdx);
-    game.run();
-
     return 0;
 }
 /*-- File: main.cpp end --*/

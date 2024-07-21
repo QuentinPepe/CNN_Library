@@ -123,6 +123,7 @@ namespace nnm {
                 data[i] = value;
             }
         }
+
     };
 
 } // namespace nnm

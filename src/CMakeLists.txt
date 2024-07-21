@@ -1,6 +1,13 @@
 add_library(GameLib
         Vector.h
         ConvolutionalLayer.cpp
+        BatchNormalizationLayer.h
+        ReLULayer.h
+        LinearLayer.h
+        MaxPoolingLayer.h
+        FullyConnectedLayer.h
+        LossFunctions.h
+        BatchNorm2d.h
 )
 
 add_executable(CNN main.cpp

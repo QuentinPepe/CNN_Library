@@ -8,6 +8,7 @@
 #include <iostream>
 #include <cmath>
 #include <numeric>
+#include "Vector.h"
 
 namespace nnm {
     class Matrix {
@@ -223,6 +224,22 @@ namespace nnm {
         const std::vector<float> &getData() const { return data; }
 
         std::vector<float> &getData() { return data; }
+
+        Vector operator*(const Vector &vec) const {
+            if (cols != vec.size()) {
+                throw std::invalid_argument("Matrix and vector dimensions do not match for multiplication");
+            }
+
+            Vector result(rows);
+            for (size_t i = 0; i < rows; ++i) {
+                float sum = 0.0f;
+                for (size_t j = 0; j < cols; ++j) {
+                    sum += (*this)(i, j) * vec[j];
+                }
+                result[i] = sum;
+            }
+            return result;
+        }
 
     };
 } // namespace nnm

@@ -74,6 +74,14 @@ namespace nnm {
             return std::accumulate(data.begin(), data.end(), 0.0f);
         }
 
+        float max() const {
+            return *std::max_element(data.begin(), data.end());
+        }
+
+        float mean() const {
+            return std::accumulate(data.begin(), data.end(), 0.0f) / static_cast<float>(data.size());
+        }
+
         void fill(float value) {
             std::fill(data.begin(), data.end(), value);
         }
