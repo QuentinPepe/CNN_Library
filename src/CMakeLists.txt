@@ -3,7 +3,6 @@ add_library(GameLib
         ReLULayer.h
         LinearLayer.h
         MaxPoolingLayer.h
-        FullyConnectedLayer.h
         LossFunctions.h
         BatchNorm2d.h
         Layer.h
@@ -13,7 +12,7 @@ add_library(GameLib
         FlattenLayer.h
         Tanh.h
         Sequential.h
-        Tensor4D.cpp
+        Foo.cpp
 )
 
 add_executable(CNN main.cpp

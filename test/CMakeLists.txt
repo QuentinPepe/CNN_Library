@@ -10,7 +10,6 @@ if (GTEST_FOUND)
             test_matrix_convolutional.cpp
             test_tensor4d.cpp
             test_max_pooling.cpp
-            test_fully_connected.cpp
             test_relu_layer.cpp
             test_loss_fuctions.cpp
             test_batch_norm_2d_layer.cpp

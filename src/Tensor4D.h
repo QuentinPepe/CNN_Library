@@ -25,6 +25,29 @@ namespace nnm {
                 : batch_size(batch_size), channels(channels), height(height), width(width),
                   data(batch_size * channels * height * width, value) {}
 
+        Tensor4D(const std::vector<std::vector<std::vector<std::vector<float>>>> &values) {
+            size_t batch_size = values.size();
+            size_t channels = values[0].size();
+            size_t height = values[0][0].size();
+            size_t width = values[0][0][0].size();
+
+            data.resize(batch_size * channels * height * width);
+            for (size_t n = 0; n < batch_size; ++n) {
+                for (size_t c = 0; c < channels; ++c) {
+                    for (size_t h = 0; h < height; ++h) {
+                        for (size_t w = 0; w < width; ++w) {
+                            (*this)(n, c, h, w) = values[n][c][h][w];
+                        }
+                    }
+                }
+            }
+
+            this->batch_size = batch_size;
+            this->channels = channels;
+            this->height = height;
+            this->width = width;
+        }
+
 
         float &operator()(size_t n, size_t c, size_t h, size_t w) {
             return data[(n * channels * height * width) + (c * height * width) + (h * width) + w];
