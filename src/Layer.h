@@ -1,3 +1,8 @@
+#pragma GCC push_options
+#pragma GCC target("avx2")
+#pragma GCC optimize("O3")
+
+
 #pragma once
 
 #include <memory>

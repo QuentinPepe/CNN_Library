@@ -64,9 +64,6 @@ namespace nnm {
             return 0;
         }
 
-        std::unique_ptr<Layer<Tensor4D, Tensor4D>> clone() const override {
-            return std::make_unique<MaxPoolingLayer>(*this);
-        }
     };
 
 } // namespace nnm
