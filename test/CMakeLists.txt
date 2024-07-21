@@ -15,6 +15,7 @@ if (GTEST_FOUND)
             test_loss_fuctions.cpp
             test_batch_norm_2d_layer.cpp
             test_linear_layer.cpp
+            test_flatten.cpp
     )
 
     # Link the test executable with Google Test, our Game library, and nlohmann_json

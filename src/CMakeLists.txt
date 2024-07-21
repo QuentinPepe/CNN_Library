@@ -8,14 +8,14 @@ add_library(GameLib
         FullyConnectedLayer.h
         LossFunctions.h
         BatchNorm2d.h
-)
-
-add_executable(CNN main.cpp
         Layer.h
         Matrix.h
         ConvolutionalLayer.h
         Tensor4D.h
+        FlattenLayer.h
 )
+
+add_executable(CNN main.cpp)
 
 target_link_libraries(CNN PRIVATE GameLib)
 
