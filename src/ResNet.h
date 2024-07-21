@@ -48,14 +48,29 @@ namespace nnm {
             valueHead->add_layer(std::make_unique<Tanh>());
         }
 
-        std::pair<Tensor4D, Tensor4D> forward(const Tensor4D &input) {
+        std::pair<Tensor4D, Tensor4D> forward(const Tensor4D &input) override {
             Tensor4D x = startBlock->forward(input);
+
             for (const auto &resBlock: backBone) {
                 x = resBlock->forward(x);
             }
+
             Tensor4D policy = policyHead->forward(x);
+
             Tensor4D value = valueHead->forward(x);
             return {policy, value};
+        }
+
+        std::string get_name() const override {
+            return "ResNet";
+        }
+
+        size_t get_input_size() const override {
+            return row_count * column_count; // Adjust based on actual input size requirements
+        }
+
+        size_t get_output_size() const override {
+            return action_size; // Adjust based on actual output size requirements
         }
     };
 }
