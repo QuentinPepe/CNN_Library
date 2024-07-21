@@ -13,6 +13,8 @@ add_library(GameLib
         Tanh.h
         Sequential.h
         Foo.cpp
+        ResNet.h
+        ResBlock.h
 )
 
 add_executable(CNN main.cpp
