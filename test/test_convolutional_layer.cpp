@@ -1,6 +1,5 @@
 #include <gtest/gtest.h>
 #include "ConvolutionalLayer.h"
-#include "Vector.h"
 #include "Tensor4D.h"
 #include <cmath>
 #include <iostream>
@@ -47,13 +46,13 @@ namespace nnm {
             return result;
         }
 
-        static Vector linspace_vector(float start, float end, size_t num) {
-            Vector result(num);
-            float step = (end - start) / (num - 1);
-            for (size_t i = 0; i < num; ++i) {
-                result[i] = start + i * step;
+        static Tensor4D create_bias_tensor(float start, float end, size_t channels) {
+            Tensor4D bias(1, channels, 1, 1);  // Bias tensor with shape [1, channels, 1, 1]
+            float step = (end - start) / (channels - 1);
+            for (size_t c = 0; c < channels; ++c) {
+                bias(0, c, 0, 0) = start + c * step;
             }
-            return result;
+            return bias;
         }
     };
 
@@ -61,13 +60,12 @@ namespace nnm {
         // Define shapes for input data, weights and biases
         std::vector<size_t> x_shape = {1, 3, 4, 4};
         std::vector<size_t> w_shape = {3, 3, 4, 4};
-        size_t b_shape = 3;
+        size_t b_channels = 3;  // Number of channels for biases
 
         // Generate data
         Tensor4D x = linspace_tensor4d(0, 255, x_shape);
         Tensor4D w = linspace_tensor4d(-1.0, 1.0, w_shape);
-        Vector b = linspace_vector(-1.0, 1.0, b_shape);
-
+        Tensor4D b = create_bias_tensor(-1.0f, 1.0f, b_channels);
 
         // Print input data for debugging
         std::cout << "Input x:" << std::endl;
@@ -75,10 +73,7 @@ namespace nnm {
         std::cout << "Weights w:" << std::endl;
         w.print();
         std::cout << "Bias b:" << std::endl;
-        for (size_t i = 0; i < b.size(); ++i) {
-            std::cout << b[i] << " ";
-        }
-        std::cout << std::endl;
+        b.print();
 
         // Create ConvolutionalLayer
         ConvolutionalLayer layer(3, 3, 4, 2, 1);
@@ -92,7 +87,7 @@ namespace nnm {
         std::cout << "Output:" << std::endl;
         out.print();
 
-        // Define correct output
+        // Define correct output (for validation)
         Tensor4D correct_out(1, 3, 2, 2);
         correct_out(0, 0, 0, 0) = -1585.7484f;
         correct_out(0, 0, 0, 1) = -1724.0426f;

@@ -1,6 +1,5 @@
 add_library(GameLib
         Vector.h
-        ConvolutionalLayer.cpp
         ReLULayer.h
         LinearLayer.h
         MaxPoolingLayer.h
@@ -14,6 +13,7 @@ add_library(GameLib
         FlattenLayer.h
         Tanh.h
         Sequential.h
+        Tensor4D.cpp
 )
 
 add_executable(CNN main.cpp

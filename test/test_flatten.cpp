@@ -125,9 +125,9 @@ namespace nnm {
         Tensor4D input = create_input_tensor();
 
         // Perform forward pass
-        Matrix output = flatten.forward(input);
+        Tensor4D output = flatten.forward(input);
 
-        Matrix expected_output(2, 48);
+        Tensor4D expected_output(1, 2, 48, 1);
         expected_output(0, 0) = 0.791865f;
         expected_output(0, 1) = -0.436437f;
         expected_output(0, 2) = -1.205499f;
@@ -226,13 +226,19 @@ namespace nnm {
         expected_output(1, 47) = -1.022640f;
 
         // Check output dimensions
-        EXPECT_EQ(output.getRows(), expected_output.getRows());
-        EXPECT_EQ(output.getCols(), expected_output.getCols());
+        EXPECT_EQ(output.getBatchSize(), expected_output.getBatchSize());
+        EXPECT_EQ(output.getChannels(), expected_output.getChannels());
+        EXPECT_EQ(output.getHeight(), expected_output.getHeight());
+        EXPECT_EQ(output.getWidth(), expected_output.getWidth());
 
         // Check output values
-        for (size_t i = 0; i < output.getRows(); ++i) {
-            for (size_t j = 0; j < output.getCols(); ++j) {
-                EXPECT_TRUE(is_close(output(i, j), expected_output(i, j)));
+        for (size_t n = 0; n < output.getBatchSize(); ++n) {
+            for (size_t c = 0; c < output.getChannels(); ++c) {
+                for (size_t h = 0; h < output.getHeight(); ++h) {
+                    for (size_t w = 0; w < output.getWidth(); ++w) {
+                        EXPECT_TRUE(is_close(output(n, c, h, w), expected_output(n, c, h, w)));
+                    }
+                }
             }
         }
     }

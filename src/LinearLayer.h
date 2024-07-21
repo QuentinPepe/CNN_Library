@@ -1,23 +1,24 @@
 #pragma once
 
 #include "Layer.h"
-#include "Matrix.h"
-#include "Vector.h"
+#include "Tensor4D.h"
 #include <random>
+#include <cmath>
 
 namespace nnm {
 
-    class LinearLayer : public Layer<Vector, Vector> {
+    class LinearLayer : public Layer<Tensor4D, Tensor4D> {
     private:
-        Matrix weights;
-        Vector bias;
+        Tensor4D weights;
+        Tensor4D bias;
         size_t in_features;
         size_t out_features;
 
     public:
         LinearLayer(size_t in_features, size_t out_features)
                 : in_features(in_features), out_features(out_features),
-                  weights(out_features, in_features), bias(out_features) {
+                  weights(1, out_features, in_features, 1),
+                  bias(1, out_features, 1, 1) {
 
             // Xavier/Glorot initialization
             std::random_device rd;
@@ -26,17 +27,43 @@ namespace nnm {
 
             for (size_t i = 0; i < out_features; ++i) {
                 for (size_t j = 0; j < in_features; ++j) {
-                    weights(i, j) = dis(gen);
+                    weights(0, i, j, 0) = dis(gen);
                 }
-                bias[i] = 0.0f; // Initialize bias to zero
+                bias(0, i, 0, 0) = 0.0f;
             }
         }
 
-        Vector forward(const Vector &input) override {
-            if (input.size() != in_features) {
-                throw std::invalid_argument("Input size does not match layer input features");
+        Tensor4D forward(const Tensor4D &input) {
+            size_t batch_size = input.getBatchSize();
+            Tensor4D output(batch_size, out_features, 1, 1);
+
+            for (size_t n = 0; n < batch_size; ++n) {
+                for (size_t j = 0; j < out_features; ++j) {
+                    __m256 sum_vec = _mm256_setzero_ps();
+                    size_t i;
+
+                    for (i = 0; i + 7 < in_features; i += 8) {
+                        __m256 input_vec = _mm256_loadu_ps(&input(n, i, 0, 0));
+                        __m256 weight_vec = _mm256_loadu_ps(&weights(0, i, j, 0));
+                        sum_vec = _mm256_add_ps(sum_vec, _mm256_mul_ps(input_vec, weight_vec));
+                    }
+
+                    __m128 sum_high = _mm256_extractf128_ps(sum_vec, 1);
+                    __m128 sum_low = _mm256_castps256_ps128(sum_vec);
+                    __m128 sum = _mm_add_ps(sum_high, sum_low);
+                    sum = _mm_hadd_ps(sum, sum);
+                    sum = _mm_hadd_ps(sum, sum);
+                    float result = _mm_cvtss_f32(sum);
+
+                    for (; i < in_features; ++i) {
+                        result += input(n, i, 0, 0) * weights(0, i, j, 0);
+                    }
+
+                    output(n, j, 0, 0) = result + bias(0, j, 0, 0);
+                }
             }
-            return weights * input + bias;
+
+            return output;
         }
 
         std::string get_name() const override {
@@ -51,28 +78,28 @@ namespace nnm {
             return out_features;
         }
 
-        std::unique_ptr<Layer<Vector, Vector>> clone() const override {
+        std::unique_ptr<Layer<Tensor4D, Tensor4D>> clone() const override {
             return std::make_unique<LinearLayer>(*this);
         }
 
-        const Matrix &get_weights() const {
+        const Tensor4D &get_weights() const {
             return weights;
         }
 
-        const Vector &get_bias() const {
+        const Tensor4D &get_bias() const {
             return bias;
         }
 
-        void set_weights(const Matrix &new_weights) {
-            if (new_weights.getRows() != out_features || new_weights.getCols() != in_features) {
+        void set_weights(const Tensor4D &new_weights) {
+            if (new_weights.getChannels() != in_features || new_weights.getHeight() != out_features) {
                 throw std::invalid_argument("New weights dimensions do not match layer dimensions");
             }
             weights = new_weights;
         }
 
-        void set_bias(const Vector &new_bias) {
-            if (new_bias.size() != out_features) {
-                throw std::invalid_argument("New bias size does not match layer output features");
+        void set_bias(const Tensor4D &new_bias) {
+            if (new_bias.getChannels() != out_features || new_bias.getHeight() != 1 || new_bias.getWidth() != 1) {
+                throw std::invalid_argument("New bias dimensions do not match layer dimensions");
             }
             bias = new_bias;
         }

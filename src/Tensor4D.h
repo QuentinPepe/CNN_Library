@@ -37,7 +37,7 @@ namespace nnm {
         Tensor4D operator+(const Tensor4D &other) const {
             if (batch_size != other.batch_size || channels != other.channels ||
                 height != other.height || width != other.width) {
-                throw std::invalid_argument("Tensor dimensions do not match for addition");
+                throw std::invalid_argument("Tensor4D.cpp dimensions do not match for addition");
             }
             Tensor4D result(batch_size, channels, height, width);
             for (size_t i = 0; i < data.size(); ++i) {
@@ -49,7 +49,7 @@ namespace nnm {
         Tensor4D operator-(const Tensor4D &other) const {
             if (batch_size != other.batch_size || channels != other.channels ||
                 height != other.height || width != other.width) {
-                throw std::invalid_argument("Tensor dimensions do not match for subtraction");
+                throw std::invalid_argument("Tensor4D.cpp dimensions do not match for subtraction");
             }
             Tensor4D result(batch_size, channels, height, width);
             for (size_t i = 0; i < data.size(); ++i) {
@@ -61,7 +61,7 @@ namespace nnm {
         Tensor4D elementWiseMul(const Tensor4D &other) const {
             if (batch_size != other.batch_size || channels != other.channels ||
                 height != other.height || width != other.width) {
-                throw std::invalid_argument("Tensor dimensions do not match for element-wise multiplication");
+                throw std::invalid_argument("Tensor4D.cpp dimensions do not match for element-wise multiplication");
             }
             Tensor4D result(batch_size, channels, height, width);
             for (size_t i = 0; i < data.size(); ++i) {
@@ -209,6 +209,15 @@ namespace nnm {
             return padded;
         }
 
+        const float &operator()(size_t i, size_t j) const {
+            return this->operator()(0, i, j, 0);
+        }
+
+        float &operator()(size_t i, size_t j) {
+            return this->operator()(0, i, j, 0);
+        }
+
+
         size_t getBatchSize() const { return batch_size; }
 
         size_t getChannels() const { return channels; }
@@ -222,4 +231,9 @@ namespace nnm {
         std::vector<float> &getData() { return data; }
 
     };
+
+    Tensor4D create_tensor(const std::vector<std::vector<std::vector<std::vector<float>>>> &values);
+
+
 } // namespace nnm
+
