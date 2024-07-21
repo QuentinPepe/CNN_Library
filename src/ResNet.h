@@ -57,7 +57,5 @@ namespace nnm {
             Tensor4D value = valueHead->forward(x);
             return {policy, value};
         }
-
-        // Implement other necessary methods...
     };
 }
