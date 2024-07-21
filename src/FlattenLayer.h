@@ -57,9 +57,6 @@ namespace nnm {
             return 0;  // Not applicable for Flatten
         }
 
-        std::unique_ptr<Layer<Tensor4D, Tensor4D>> clone() const override {
-            return std::make_unique<Flatten>(*this);
-        }
     };
 
 } // namespace nnm

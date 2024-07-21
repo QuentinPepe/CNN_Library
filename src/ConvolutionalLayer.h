@@ -99,10 +99,6 @@ namespace nnm {
             return out_channels;
         }
 
-        [[nodiscard]] std::unique_ptr<Layer<Tensor4D, Tensor4D>> clone() const override {
-            return std::make_unique<ConvolutionalLayer>(*this);
-        }
-
         void set_weights(const Tensor4D &new_weights) {
             weights = new_weights;
         }

@@ -33,5 +33,15 @@ namespace nnm {
             return x;
         }
 
+        std::string get_name() const override { return "ResBlock"; }
+
+        size_t get_input_size() const override {
+            return conv1->get_input_size();
+        }
+
+        size_t get_output_size() const override {
+            return conv2->get_output_size();
+        }
+
     };
 }

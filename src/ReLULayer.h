@@ -47,9 +47,6 @@ namespace nnm {
             return 0;  // ReLU doesn't change the size
         }
 
-        std::unique_ptr<Layer<Tensor4D, Tensor4D>> clone() const override {
-            return std::make_unique<ReLULayer>(*this);
-        }
     };
 
 } // namespace nnm

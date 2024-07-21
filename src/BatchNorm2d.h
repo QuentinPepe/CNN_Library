@@ -97,11 +97,6 @@ namespace nnm {
             return num_features;
         }
 
-        std::unique_ptr<Layer<Tensor4D, Tensor4D>> clone() const override {
-            return std::make_unique<BatchNorm2d>(*this);
-        }
-
-
         void set_parameters(const Tensor4D &weight, const Tensor4D &bias,
                             const Tensor4D &running_mean, const Tensor4D &running_var) {
             if (weight.getChannels() != num_features || bias.getChannels() != num_features ||

@@ -8,7 +8,7 @@
 
 namespace nnm {
 
-    class ResNet : public Layer<Tensor4D, Tensor4D> {
+    class ResNet : public Layer<Tensor4D, std::pair<Tensor4D, Tensor4D>> {
     private:
         std::unique_ptr<Sequential> startBlock;
         std::vector<std::unique_ptr<ResBlock>> backBone;

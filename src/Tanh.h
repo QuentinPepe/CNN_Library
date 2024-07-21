@@ -79,9 +79,6 @@ namespace nnm {
             return 0;  // Not applicable for Tanh
         }
 
-        std::unique_ptr<Layer<Tensor4D, Tensor4D>> clone() const override {
-            return std::make_unique<Tanh>(*this);
-        }
     };
 
 } // namespace nnm

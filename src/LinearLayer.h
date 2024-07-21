@@ -78,10 +78,6 @@ namespace nnm {
             return out_features;
         }
 
-        std::unique_ptr<Layer<Tensor4D, Tensor4D>> clone() const override {
-            return std::make_unique<LinearLayer>(*this);
-        }
-
         const Tensor4D &get_weights() const {
             return weights;
         }

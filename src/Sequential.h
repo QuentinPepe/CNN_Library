@@ -23,9 +23,10 @@ namespace nnm {
             } else {
                 // Ensure the layer's input size matches the previous layer's output size
                 size_t prev_output_size = layers.back()->get_output_size();
-                // if (prev_output_size != layer->get_input_size()) {
-                // throw std::invalid_argument("Layer input size does not match the previous layer's output size.");
-                // }
+                if (prev_output_size != layer->get_input_size() || prev_output_size == 0 ||
+                    layer->get_input_size() == 0) {
+                    throw std::invalid_argument("Layer input size does not match the previous layer's output size.");
+                }
                 layers.push_back(std::move(layer));
             }
         }
@@ -59,13 +60,6 @@ namespace nnm {
             return layers.back()->get_output_size();
         }
 
-        std::unique_ptr<Layer<Tensor4D, Tensor4D>> clone() const override {
-            auto clone_seq = std::make_unique<Sequential>();
-            for (const auto &layer: layers) {
-                clone_seq->add_layer(layer->clone());
-            }
-            return clone_seq;
-        }
 
         std::string extra_repr() const {
             std::string repr = "Layers:\n";
