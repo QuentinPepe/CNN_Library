@@ -48,6 +48,37 @@ namespace nnm {
             this->width = width;
         }
 
+        Tensor4D(
+                std::initializer_list<std::initializer_list<std::initializer_list<std::initializer_list<float>>>> values)
+                : batch_size(values.size()),
+                  channels(values.begin()->size()),
+                  height(values.begin()->begin()->size()),
+                  width(values.begin()->begin()->begin()->size()) {
+            data.resize(batch_size * channels * height * width);
+            size_t n = 0;
+            for (const auto &batch: values) {
+                size_t c = 0;
+                for (const auto &channel: batch) {
+                    size_t h = 0;
+                    for (const auto &row: channel) {
+                        size_t w = 0;
+                        for (float val: row) {
+                            (*this)(n, c, h, w) = val;
+                            ++w;
+                        }
+                        ++h;
+                    }
+                    ++c;
+                }
+                ++n;
+            }
+        }
+
+        Tensor4D(std::initializer_list<float> values)
+                : batch_size(1), channels(values.size()), height(1), width(1) {
+            data.assign(values.begin(), values.end());
+        }
+
 
         float &operator()(size_t n, size_t c, size_t h, size_t w) {
             return data[(n * channels * height * width) + (c * height * width) + (h * width) + w];
@@ -66,6 +97,7 @@ namespace nnm {
             for (size_t i = 0; i < data.size(); ++i) {
                 result.data[i] = data[i] + other.data[i];
             }
+
             return result;
         }
 

@@ -4,6 +4,8 @@
 #include "Tensor4D.h"
 #include <random>
 #include <cmath>
+#include <stdexcept>
+#include <iostream>
 
 namespace nnm {
 
@@ -33,32 +35,30 @@ namespace nnm {
             }
         }
 
-        Tensor4D forward(const Tensor4D &input) {
+        Tensor4D forward(const Tensor4D &input) override {
             size_t batch_size = input.getBatchSize();
+            size_t input_size = input.getChannels() * input.getHeight() * input.getWidth();
+
+            if (input_size != in_features) {
+                throw std::invalid_argument("Input size does not match layer's in_features");
+            }
+
+            std::cout << "Input dimensions: " << input.getBatchSize() << "x" << input.getChannels()
+                      << "x" << input.getHeight() << "x" << input.getWidth() << std::endl;
+            std::cout << "Weight dimensions: " << weights.getBatchSize() << "x" << weights.getChannels()
+                      << "x" << weights.getHeight() << "x" << weights.getWidth() << std::endl;
+
             Tensor4D output(batch_size, out_features, 1, 1);
 
             for (size_t n = 0; n < batch_size; ++n) {
                 for (size_t j = 0; j < out_features; ++j) {
-                    __m256 sum_vec = _mm256_setzero_ps();
-                    size_t i;
-
-                    for (i = 0; i + 7 < in_features; i += 8) {
-                        __m256 input_vec = _mm256_loadu_ps(&input(n, i, 0, 0));
-                        __m256 weight_vec = _mm256_loadu_ps(&weights(0, i, j, 0));
-                        sum_vec = _mm256_add_ps(sum_vec, _mm256_mul_ps(input_vec, weight_vec));
+                    float result = 0.0f;
+                    for (size_t i = 0; i < in_features; ++i) {
+                        size_t c = i / (input.getHeight() * input.getWidth());
+                        size_t h = (i % (input.getHeight() * input.getWidth())) / input.getWidth();
+                        size_t w = (i % (input.getHeight() * input.getWidth())) % input.getWidth();
+                        result += input(n, c, h, w) * weights(0, j, i, 0);
                     }
-
-                    __m128 sum_high = _mm256_extractf128_ps(sum_vec, 1);
-                    __m128 sum_low = _mm256_castps256_ps128(sum_vec);
-                    __m128 sum = _mm_add_ps(sum_high, sum_low);
-                    sum = _mm_hadd_ps(sum, sum);
-                    sum = _mm_hadd_ps(sum, sum);
-                    float result = _mm_cvtss_f32(sum);
-
-                    for (; i < in_features; ++i) {
-                        result += input(n, i, 0, 0) * weights(0, i, j, 0);
-                    }
-
                     output(n, j, 0, 0) = result + bias(0, j, 0, 0);
                 }
             }
@@ -91,14 +91,20 @@ namespace nnm {
         }
 
         void set_weights(const Tensor4D &new_weights) {
-            if (new_weights.getChannels() != in_features || new_weights.getHeight() != out_features) {
+            if (new_weights.getBatchSize() != 1 ||
+                new_weights.getChannels() != out_features ||
+                new_weights.getHeight() != in_features ||
+                new_weights.getWidth() != 1) {
                 throw std::invalid_argument("New weights dimensions do not match layer dimensions");
             }
             weights = new_weights;
         }
 
         void set_bias(const Tensor4D &new_bias) {
-            if (new_bias.getChannels() != out_features || new_bias.getHeight() != 1 || new_bias.getWidth() != 1) {
+            if (new_bias.getBatchSize() != 1 ||
+                new_bias.getChannels() != out_features ||
+                new_bias.getHeight() != 1 ||
+                new_bias.getWidth() != 1) {
                 throw std::invalid_argument("New bias dimensions do not match layer dimensions");
             }
             bias = new_bias;
