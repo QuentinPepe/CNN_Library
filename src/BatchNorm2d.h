@@ -2,7 +2,6 @@
 
 #include "Layer.h"
 #include "Tensor4D.h"
-#include "Vector.h"
 #include <cmath>
 #include <memory>
 
@@ -13,22 +12,29 @@ namespace nnm {
         size_t num_features;
         float eps;
 
-        Vector weight;
-        Vector bias;
-        Vector running_mean;
-        Vector running_var;
+        Tensor4D weight;
+        Tensor4D bias;
+        Tensor4D running_mean;
+        Tensor4D running_var;
 
     public:
         BatchNorm2d(size_t num_features, float eps = 1e-5)
                 : num_features(num_features), eps(eps),
-                  weight(num_features), bias(num_features),
-                  running_mean(num_features), running_var(num_features) {
+                  weight(1, num_features, 1, 1),
+                  bias(1, num_features, 1, 1),
+                  running_mean(1, num_features, 1, 1),
+                  running_var(1, num_features, 1, 1) {
+            // Initialize weights to 1 and biases to 0
+            weight.fill(1.0f);
+            bias.fill(0.0f);
+            running_mean.fill(0.0f);
+            running_var.fill(1.0f);
         }
 
-        void set_parameters(const Vector &weight, const Vector &bias,
-                            const Vector &running_mean, const Vector &running_var) {
-            if (weight.size() != num_features || bias.size() != num_features ||
-                running_mean.size() != num_features || running_var.size() != num_features) {
+        void set_parameters(const Tensor4D &weight, const Tensor4D &bias,
+                            const Tensor4D &running_mean, const Tensor4D &running_var) {
+            if (weight.getChannels() != num_features || bias.getChannels() != num_features ||
+                running_mean.getChannels() != num_features || running_var.getChannels() != num_features) {
                 throw std::invalid_argument("Parameter sizes do not match num_features");
             }
             this->weight = weight;
@@ -46,11 +52,11 @@ namespace nnm {
 
             for (size_t n = 0; n < input.getBatchSize(); ++n) {
                 for (size_t c = 0; c < num_features; ++c) {
-                    float inv_std = 1.0f / std::sqrt(running_var[c] + eps);
+                    float inv_std = 1.0f / std::sqrt(running_var(0, c, 0, 0) + eps);
                     for (size_t h = 0; h < input.getHeight(); ++h) {
                         for (size_t w = 0; w < input.getWidth(); ++w) {
-                            float normalized = (input(n, c, h, w) - running_mean[c]) * inv_std;
-                            output(n, c, h, w) = normalized * weight[c] + bias[c];
+                            float normalized = (input(n, c, h, w) - running_mean(0, c, 0, 0)) * inv_std;
+                            output(n, c, h, w) = normalized * weight(0, c, 0, 0) + bias(0, c, 0, 0);
                         }
                     }
                 }

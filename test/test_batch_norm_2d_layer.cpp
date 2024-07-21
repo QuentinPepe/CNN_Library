@@ -122,10 +122,25 @@ namespace nnm {
         BatchNorm2d bn(3);
 
         // Set parameters
-        Vector weight({1.0f, 2.0f, 3.0f});
-        Vector bias({0.1f, 0.2f, 0.3f});
-        Vector running_mean({0.5f, 1.0f, 1.5f});
-        Vector running_var({1.0f, 2.0f, 3.0f});
+        Tensor4D weight(1, 3, 1, 1);
+        weight(0, 0, 0, 0) = 1.0f;
+        weight(0, 1, 0, 0) = 2.0f;
+        weight(0, 2, 0, 0) = 3.0f;
+
+        Tensor4D bias(1, 3, 1, 1);
+        bias(0, 0, 0, 0) = 0.1f;
+        bias(0, 1, 0, 0) = 0.2f;
+        bias(0, 2, 0, 0) = 0.3f;
+        Tensor4D running_mean(1, 3, 1, 1);
+        running_mean(0, 0, 0, 0) = 0.5f;
+        running_mean(0, 1, 0, 0) = 1.0f;
+        running_mean(0, 2, 0, 0) = 1.5f;
+
+        Tensor4D running_var(1, 3, 1, 1);
+        running_var(0, 0, 0, 0) = 1.0f;
+        running_var(0, 1, 0, 0) = 2.0f;
+        running_var(0, 2, 0, 0) = 3.0f;
+
         bn.set_parameters(weight, bias, running_mean, running_var);
 
         // Create input tensor
