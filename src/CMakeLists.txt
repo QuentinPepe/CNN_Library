@@ -1,7 +1,6 @@
 add_library(GameLib
         Vector.h
         ConvolutionalLayer.cpp
-        BatchNormalizationLayer.h
         ReLULayer.h
         LinearLayer.h
         MaxPoolingLayer.h
@@ -13,9 +12,12 @@ add_library(GameLib
         ConvolutionalLayer.h
         Tensor4D.h
         FlattenLayer.h
+        Tanh.h
+        Sequential.h
 )
 
-add_executable(CNN main.cpp)
+add_executable(CNN main.cpp
+)
 
 target_link_libraries(CNN PRIVATE GameLib)
 

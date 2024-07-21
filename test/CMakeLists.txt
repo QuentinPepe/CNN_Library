@@ -16,6 +16,7 @@ if (GTEST_FOUND)
             test_batch_norm_2d_layer.cpp
             test_linear_layer.cpp
             test_flatten.cpp
+            test_tanh_layer.cpp
     )
 
     # Link the test executable with Google Test, our Game library, and nlohmann_json
