@@ -1,7 +1,6 @@
 #pragma once
 
-#include "Matrix.h"
-#include "Vector.h"
+#include "Tensor4D.h"
 #include <cmath>
 #include <limits>
 #include <stdexcept>
@@ -12,74 +11,75 @@ namespace nnm {
     public:
         struct SoftmaxLossResult {
             float loss;
-            Matrix gradient;
+            Tensor4D gradient;
         };
 
-        static SoftmaxLossResult softmax_loss(const Matrix &x, const Vector &y) {
-            if (x.getRows() != y.size()) {
-                throw std::invalid_argument("Number of samples in x and y must match");
+        static SoftmaxLossResult softmax_loss(const Tensor4D &x, const Tensor4D &y) {
+            if (x.getBatchSize() != y.getBatchSize() || y.getChannels() != 1 || y.getHeight() != 1 ||
+                y.getWidth() != 1) {
+                throw std::invalid_argument("Dimensions of x and y must match, and y should be a 1D tensor");
             }
 
-            size_t N = x.getRows();
-            size_t C = x.getCols();
+            size_t N = x.getBatchSize();
+            size_t C = x.getChannels();
 
             // Calculate shifted logits
-            Matrix shifted_logits(N, C);
+            Tensor4D shifted_logits(N, C, 1, 1);
             for (size_t i = 0; i < N; ++i) {
                 float max_val = -std::numeric_limits<float>::max();
                 for (size_t j = 0; j < C; ++j) {
-                    max_val = std::max(max_val, x(i, j));
+                    max_val = std::max(max_val, x(i, j, 0, 0));
                 }
                 for (size_t j = 0; j < C; ++j) {
-                    shifted_logits(i, j) = x(i, j) - max_val;
+                    shifted_logits(i, j, 0, 0) = x(i, j, 0, 0) - max_val;
                 }
             }
 
             // Calculate sum of exp(shifted_logits)
-            Vector z(N);
+            Tensor4D z(N, 1, 1, 1);
             for (size_t i = 0; i < N; ++i) {
                 float sum = 0.0f;
                 for (size_t j = 0; j < C; ++j) {
-                    sum += std::exp(shifted_logits(i, j));
+                    sum += std::exp(shifted_logits(i, j, 0, 0));
                 }
-                z[i] = sum;
+                z(i, 0, 0, 0) = sum;
             }
 
             // Calculate log probabilities and probabilities
-            Matrix log_probs(N, C);
-            Matrix probs(N, C);
+            Tensor4D log_probs(N, C, 1, 1);
+            Tensor4D probs(N, C, 1, 1);
             for (size_t i = 0; i < N; ++i) {
                 for (size_t j = 0; j < C; ++j) {
-                    log_probs(i, j) = shifted_logits(i, j) - std::log(z[i]);
-                    probs(i, j) = std::exp(log_probs(i, j));
+                    log_probs(i, j, 0, 0) = shifted_logits(i, j, 0, 0) - std::log(z(i, 0, 0, 0));
+                    probs(i, j, 0, 0) = std::exp(log_probs(i, j, 0, 0));
                 }
             }
 
             // Calculate loss
             float loss = 0.0f;
             for (size_t i = 0; i < N; ++i) {
-                if (y[i] < 0 || y[i] >= C) {
+                size_t label = static_cast<size_t>(y(i, 0, 0, 0));
+                if (label < 0 || label >= C) {
                     throw std::out_of_range("Label must be between 0 and C-1");
                 }
-                loss -= log_probs(i, static_cast<size_t>(y[i]));
+                loss -= log_probs(i, label, 0, 0);
             }
             loss /= N;
 
             // Calculate gradient
-            Matrix dx = probs;
+            Tensor4D dx = probs;
             for (size_t i = 0; i < N; ++i) {
-                dx(i, static_cast<size_t>(y[i])) -= 1.0f;
+                size_t label = static_cast<size_t>(y(i, 0, 0, 0));
+                dx(i, label, 0, 0) -= 1.0f;
             }
             for (size_t i = 0; i < N; ++i) {
                 for (size_t j = 0; j < C; ++j) {
-                    dx(i, j) /= N;
+                    dx(i, j, 0, 0) /= N;
                 }
             }
 
             return {loss, dx};
         }
-
-        // You can add other loss functions here as needed
     };
 
 } // namespace nnm
