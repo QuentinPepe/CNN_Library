@@ -33,7 +33,7 @@ namespace nnm {
                 for (size_t j = 0; j < C; ++j) {
                     shifted_logits(i, j, 0, 0) = x(i, j, 0, 0) - max_val;
                 }
-            }
+             }
 
             // Calculate sum of exp(shifted_logits)
             Tensor4D z(N, 1, 1, 1);

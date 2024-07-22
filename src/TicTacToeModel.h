@@ -10,6 +10,7 @@
 #include "Tanh.h"
 #include "Tensor4D.h"
 #include <vector>
+#include "SoftMaxLayer.h"
 
 namespace nnm {
 
@@ -22,6 +23,7 @@ namespace nnm {
         LinearLayer fc1;
         LinearLayer fc2;
         LinearLayer fc3;
+        SoftMaxLayer softmax;
 
     public:
         TicTacToeModel() :
@@ -31,7 +33,7 @@ namespace nnm {
                 flatten(),
                 fc1(16 * 1 * 1, 32),
                 fc2(32, 10),
-                fc3(32, 1) {
+                fc3(32, 1), softmax(1) {
             // Initialize weights and biases
             std::vector<float> conv1_weights = {0.091810f, -0.081619f, -0.035217f, 0.051376f, -0.167802f, 0.005434f,
                                                 0.091802f, 0.024114f, -0.017707f, 0.123727f, 0.083713f, -0.171087f,
@@ -298,8 +300,6 @@ namespace nnm {
         std::pair<Tensor4D, Tensor4D> forward(const Tensor4D &x) {
             Tensor4D out = conv1.forward(x);
             out = bn1.forward(out);
-            std::cout << "bn1: " << std::endl;
-            out.print();
             out = ReLULayer().forward(out);
             out = pool.forward(out);
             out = flatten.forward(out);
@@ -307,7 +307,9 @@ namespace nnm {
             out = ReLULayer().forward(out);
 
             Tensor4D policy = fc2.forward(out);
-            // Note: Apply softmax to policy if needed
+            policy.print();
+            policy = softmax.forward(out);
+            policy.print();
 
             Tensor4D value = fc3.forward(out);
             value = Tanh().forward(value);
@@ -317,4 +319,5 @@ namespace nnm {
     };
 
 } // namespace nnm
+
 

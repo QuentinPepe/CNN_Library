@@ -142,6 +142,8 @@ namespace nnm {
         }
 
         void print() const {
+            std::cout << "Batch size: " << batch_size << ", Channels: " << channels << ", Height: " << height
+                      << ", Width: " << width << "\n";
             for (size_t n = 0; n < batch_size; ++n) {
                 std::cout << "Batch " << n << ":\n";
                 for (size_t c = 0; c < channels; ++c) {
@@ -307,9 +309,6 @@ namespace nnm {
         Tensor4D(int batch_size, int channels, int height, int width, const std::vector<float> &data)
                 : batch_size(batch_size), channels(channels), height(height), width(width), data(data) {}
     };
-
-    Tensor4D create_tensor(const std::vector<std::vector<std::vector<std::vector<float>>>> &values);
-
 
 } // namespace nnm
 

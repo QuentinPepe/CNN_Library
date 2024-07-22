@@ -16,6 +16,7 @@ add_library(GameLib
         ResNet.h
         ResBlock.h
         TicTacToeModel.h
+        SoftMaxLayer.h
 )
 
 add_executable(CNN main.cpp
