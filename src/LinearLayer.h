@@ -59,7 +59,7 @@ namespace nnm {
                         size_t w = (i % (input.getHeight() * input.getWidth())) % input.getWidth();
                         result += input(n, c, h, w) * weights(0, j, i, 0);
                     }
-                    output(n, 0, 0, 0) = result + bias(0, j, 0, 0);
+                    output(n, j, 0, 0) = result + bias(0, j, 0, 0);
                 }
             }
 

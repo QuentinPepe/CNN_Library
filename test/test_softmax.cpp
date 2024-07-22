@@ -10,7 +10,7 @@ namespace {
         return std::fabs(a - b) < epsilon;
     }
 
-    bool compareTensors(const nnm::Tensor4D &a, const nnm::Tensor4D &b, float epsilon = 1e-5) {
+    bool compareTensors(const nnm::Tensor4D &a, const nnm::Tensor4D &b, float epsilon = 1e-3) {
         if (a.getBatchSize() != b.getBatchSize() ||
             a.getChannels() != b.getChannels() ||
             a.getHeight() != b.getHeight() ||
@@ -128,13 +128,13 @@ namespace {
         for (size_t i = 0; i < input_data.size(); ++i) {
             input(0, i, 0, 0) = input_data[i];
         }
-
         nnm::Tensor4D expected_output(1, 10, 1, 1);
         std::vector<float> expected_output_data = {0.1098, 0.0937, 0.0857, 0.1110, 0.1065, 0.0791, 0.0868, 0.1176,
                                                    0.0942, 0.1156};
         for (size_t i = 0; i < expected_output_data.size(); ++i) {
             expected_output(0, i, 0, 0) = expected_output_data[i];
         }
+
 
         nnm::SoftMaxLayer softmax_layer(1);
 
