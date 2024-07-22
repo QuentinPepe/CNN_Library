@@ -15,6 +15,7 @@ add_library(GameLib
         Foo.cpp
         ResNet.h
         ResBlock.h
+        TicTacToeModel.h
 )
 
 add_executable(CNN main.cpp

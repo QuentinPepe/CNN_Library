@@ -1,58 +1,70 @@
-#include <iostream>
-#include <random>
+#include "TicTacToeModel.h"
 #include "Tensor4D.h"
-#include "ResNet.h"
+#include <iostream>
+#include <iomanip>
 
-using namespace nnm;
-
-Tensor4D generateRandomTensor(size_t batch_size, size_t channels, size_t height, size_t width) {
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_real_distribution<float> dis(0.0f, 1.0f);
-
-    Tensor4D tensor(batch_size, channels, height, width);
-    for (size_t n = 0; n < batch_size; ++n) {
-        for (size_t c = 0; c < channels; ++c) {
-            for (size_t h = 0; h < height; ++h) {
-                for (size_t w = 0; w < width; ++w) {
-                    tensor(n, c, h, w) = dis(gen);
-                }
-            }
+// Function to print the Tic-Tac-Toe board
+void printBoard(const nnm::Tensor4D &board) {
+    for (size_t i = 0; i < 3; ++i) {
+        for (size_t j = 0; j < 3; ++j) {
+            char symbol = ' ';
+            if (board(0, 0, i, j) == 1) symbol = 'X';
+            else if (board(0, 1, i, j) == 1) symbol = 'O';
+            std::cout << " " << symbol << " ";
+            if (j < 2) std::cout << "|";
         }
+        std::cout << std::endl;
+        if (i < 2) std::cout << "---+---+---" << std::endl;
     }
-
-    return tensor;
+    std::cout << std::endl;
 }
 
 int main() {
-    // Define tensor dimensions
-    size_t batch_size = 1;
-    size_t channels = 3;
-    size_t height = 3;
-    size_t width = 3;
+    // Create an instance of the TicTacToeModel
+    nnm::TicTacToeModel model;
 
-    // Generate a random tensor
-    Tensor4D randomTensor = generateRandomTensor(batch_size, channels, height, width);
+    // Create a sample Tic-Tac-Toe board state
+    // 0 = empty, 1 = X, 2 = O
+    nnm::Tensor4D board(1, 3, 3, 3);
 
-    // Print the random tensor
-    std::cout << "Random Tensor:" << std::endl;
-    randomTensor.print();
+    // Set up the board:
+    // X |   | O
+    // --+---+--
+    //   | X |
+    // --+---+--
+    // O |   |
 
-    // Create a simple ResNet
-    size_t num_resBlocks = 4;
-    size_t num_hidden = 64;
-    size_t action_size = 9;
-    ResNet resnet(num_resBlocks, num_hidden, action_size, height, width);
+    board(0, 0, 0, 0) = 1;
+    board(0, 0, 1, 1) = 1;
 
-    // Perform a forward pass
-    auto [policy, value] = resnet.forward(randomTensor);
+    board(0, 1, 0, 2) = 1;
+    board(0, 1, 2, 0) = 1;
 
-    // Print the policy and value tensors
-    std::cout << "Policy Tensor:" << std::endl;
-    policy.print();
+    board(0, 2, 0, 1) = 1;
+    board(0, 2, 1, 0) = 1;
+    board(0, 2, 1, 2) = 1;
+    board(0, 2, 2, 1) = 1;
 
-    std::cout << "Value Tensor:" << std::endl;
-    value.print();
+    // Print the board
+    std::cout << "Current Tic-Tac-Toe board:" << std::endl;
+    printBoard(board);
+
+    // Evaluate the board using the model
+    auto [policy, value] = model.forward(board);
+
+    // Print the policy (move probabilities)
+    std::cout << "Move probabilities:" << std::endl;
+    for (size_t i = 0; i < 3; ++i) {
+        for (size_t j = 0; j < 3; ++j) {
+            std::cout << std::fixed << std::setprecision(4) << policy(0, i * 3 + j, 0, 0) << " ";
+        }
+        std::cout << std::endl;
+    }
+    std::cout << std::endl;
+
+    // Print the value (game outcome prediction)
+    std::cout << "Predicted game outcome: " << value(0, 0, 0, 0) << std::endl;
+    std::cout << "(-1 favors O, +1 favors X)" << std::endl;
 
     return 0;
 }

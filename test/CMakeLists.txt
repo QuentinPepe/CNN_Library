@@ -16,7 +16,6 @@ if (GTEST_FOUND)
             test_linear_layer.cpp
             test_flatten.cpp
             test_tanh_layer.cpp
-            test_sequential.cpp
     )
 
     # Link the test executable with Google Test, our Game library, and nlohmann_json

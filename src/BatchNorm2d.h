@@ -14,7 +14,7 @@ namespace nnm {
     private:
         size_t num_features;
         double eps;
-        std::optional<double> momentum;
+        std::optional<float> momentum;
 
         std::vector<float> weight;
         std::vector<float> bias;
@@ -44,38 +44,28 @@ namespace nnm {
 
             Tensor4D output(input.getBatchSize(), num_features, input.getHeight(), input.getWidth());
 
-            for (size_t c = 0; c < num_features; ++c) {
-                double mean = running_mean[c];
-                double var = running_var[c];
-                double gamma = weight[c];
-                double beta = bias[c];
-                double inv_std = 1.0 / std::sqrt(var + eps);
+            int64_t n_batch = input.getBatchSize();
+            int64_t n_channel = num_features;
 
-                // Première passe : calculer la moyenne et la variance exactes
-                double sum = 0.0;
-                double sq_sum = 0.0;
-                size_t count = input.getBatchSize() * input.getHeight() * input.getWidth();
+            std::vector<double> inv_std(n_channel);
+            std::vector<double> gamma(n_channel);
+            std::vector<double> beta(n_channel);
 
-                for (size_t n = 0; n < input.getBatchSize(); ++n) {
-                    for (size_t h = 0; h < input.getHeight(); ++h) {
-                        for (size_t w = 0; w < input.getWidth(); ++w) {
-                            double x = input(n, c, h, w);
-                            sum += x;
-                            sq_sum += x * x;
-                        }
-                    }
-                }
+            for (int64_t c = 0; c < n_channel; c++) {
+                inv_std[c] = 1.0 / std::sqrt(static_cast<double>(running_var[c]) + static_cast<double>(eps));
+                gamma[c] = weight.empty() ? 1.0 : static_cast<double>(weight[c]);
+                beta[c] = bias.empty() ? 0.0 : static_cast<double>(bias[c]);
+            }
 
-                double batch_mean = sum / count;
-                double batch_var = (sq_sum / count) - (batch_mean * batch_mean);
+            for (int64_t n = 0; n < n_batch; ++n) {
+                for (int64_t c = 0; c < n_channel; ++c) {
+                    double inv_std_gamma = inv_std[c] * gamma[c];
 
-                // Deuxième passe : normaliser et appliquer gamma et beta
-                for (size_t n = 0; n < input.getBatchSize(); ++n) {
-                    for (size_t h = 0; h < input.getHeight(); ++h) {
-                        for (size_t w = 0; w < input.getWidth(); ++w) {
-                            double x = input(n, c, h, w);
-                            double normalized = (x - batch_mean) / std::sqrt(batch_var + eps);
-                            output(n, c, h, w) = static_cast<float>(gamma * normalized + beta);
+                    for (int64_t h = 0; h < input.getHeight(); ++h) {
+                        for (int64_t w = 0; w < input.getWidth(); ++w) {
+                            double x = static_cast<double>(input(n, c, h, w));
+                            double normalized = (x - running_mean[c]) * inv_std_gamma + beta[c];
+                            output(n, c, h, w) = static_cast<float>(normalized);
                         }
                     }
                 }
@@ -83,7 +73,6 @@ namespace nnm {
 
             return output;
         }
-
 
         std::string get_name() const override {
             return "BatchNorm2d";
@@ -98,7 +87,8 @@ namespace nnm {
         }
 
         void set_parameters(const Tensor4D &weight, const Tensor4D &bias,
-                            const Tensor4D &running_mean, const Tensor4D &running_var) {
+                            const Tensor4D &running_mean, const Tensor4D &running_var, float momentum = 0.1f
+        ) {
             if (weight.getChannels() != num_features || bias.getChannels() != num_features ||
                 running_mean.getChannels() != num_features || running_var.getChannels() != num_features) {
                 throw std::invalid_argument("Parameter sizes do not match num_features");
@@ -110,6 +100,17 @@ namespace nnm {
                 this->running_mean[c] = running_mean(0, c, 0, 0);
                 this->running_var[c] = running_var(0, c, 0, 0);
             }
+
+
+            this->momentum = momentum;
+        }
+
+        void set_momentum(float new_momentum) {
+            momentum = new_momentum;
+        }
+
+        std::optional<float> get_momentum() const {
+            return momentum;
         }
     };
 

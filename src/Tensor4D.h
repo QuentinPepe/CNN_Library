@@ -272,6 +272,25 @@ namespace nnm {
             return this->operator()(0, i, j, 0);
         }
 
+        Tensor4D operator*(float scalar) const {
+            Tensor4D result(batch_size, channels, height, width);
+            for (size_t i = 0; i < data.size(); ++i) {
+                result.data[i] = data[i] * scalar;
+            }
+            return result;
+        }
+
+        friend Tensor4D operator*(float scalar, const Tensor4D &tensor) {
+            return tensor * scalar;
+        }
+
+        Tensor4D operator/(float scalar) const {
+            if (scalar == 0.0f) {
+                throw std::invalid_argument("Division by zero");
+            }
+            return (*this) * (1.0f / scalar);
+        }
+
 
         size_t getBatchSize() const { return batch_size; }
 
@@ -285,6 +304,8 @@ namespace nnm {
 
         std::vector<float> &getData() { return data; }
 
+        Tensor4D(int batch_size, int channels, int height, int width, const std::vector<float> &data)
+                : batch_size(batch_size), channels(channels), height(height), width(width), data(data) {}
     };
 
     Tensor4D create_tensor(const std::vector<std::vector<std::vector<std::vector<float>>>> &values);
