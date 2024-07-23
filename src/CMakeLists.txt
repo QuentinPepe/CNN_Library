@@ -22,7 +22,11 @@ add_library(GameLib
 add_executable(CNN main.cpp
 )
 
-target_link_libraries(CNN PRIVATE GameLib)
+set_target_properties(GameLib PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+set_target_properties(CNN PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 
-target_include_directories(GameLib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_include_directories(CNN PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(GameLib PRIVATE ${TORCH_LIBRARIES})
+target_link_libraries(CNN PRIVATE GameLib ${TORCH_LIBRARIES})
+
+target_include_directories(GameLib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${TORCH_INCLUDE_DIRS})
+target_include_directories(CNN PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${TORCH_INCLUDE_DIRS})
