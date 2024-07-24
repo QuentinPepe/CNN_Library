@@ -1,62 +1,127 @@
 #include <torch/torch.h>
+#include <iostream>
+#include <map>
+#include "TicTacToe.h"
+#include "TicTacToeModel.h"
+#include "MCTSLearn.h"
+#include "AlphaZero.h"
 
-class TicTacToeUltimateModelUltraLight : public torch::nn::Module {
-public:
-    TicTacToeUltimateModelUltraLight(torch::Device device = torch::kCPU)
-            : conv1(torch::nn::Conv2d(torch::nn::Conv2dOptions(5, 8, 3).stride(1).padding(1))),
-              fc1(8 * 9 * 9, 64),
-              fc2(64, 81),
-              fc3(64, 1),
-              device(device) {
-        register_module("conv1", conv1);
-        register_module("fc1", fc1);
-        register_module("fc2", fc2);
-        register_module("fc3", fc3);
-        to(device);
-    }
 
-    std::tuple<torch::Tensor, torch::Tensor> forward(torch::Tensor x, bool eval_mode = false) {
-        if (eval_mode) {
-            eval();
-        } else {
-            train();
-        }
+int maain() {
+    torch::Device device(torch::cuda::is_available() ? torch::kCUDA : torch::kCPU);
+    std::cout << "Using device: " << (torch::cuda::is_available() ? "CUDA" : "CPU") << std::endl;
 
-        x = torch::relu(conv1(x));
-        x = x.flatten(1);
-        x = torch::relu(fc1(x));
-        auto policy = fc2(x);
-        auto value = fc3(x);
+    TicTacToe game;
 
-        policy = torch::softmax(policy, 1);
-        value = torch::tanh(value);
+    auto model = std::make_shared<TicTacToeModelImpl>(device.str());
+    model->to(device);
 
-        return std::make_tuple(policy, value);
-    }
+    torch::optim::Adam optimizer(model->parameters(), torch::optim::AdamOptions(0.001));
 
-private:
-    torch::nn::Conv2d conv1;
-    torch::nn::Linear fc1, fc2, fc3;
-    torch::Device device;
-};
+    std::map<std::string, float> args = {
+            {"num_iterations",          50},
+            {"num_selfPlay_iterations", 500},
+            {"num_epochs",              50},
+            {"batch_size",              64},
+            {"num_searches",            60},
+            {"dirichlet_epsilon",       0.25},
+            {"dirichlet_alpha",         0.3},
+            {"temperature",             1.0}
+    };
+
+    AlphaZero alphaZero(model, optimizer, game, args);
+
+    std::cout << "Starting training..." << std::endl;
+    alphaZero.learn();
+    std::cout << "Training completed." << std::endl;
+
+    torch::save(model, "final_model.pt");
+    std::cout << "Final model saved." << std::endl;
+
+    return 0;
+}
+
 
 int main() {
-    auto model = std::make_shared<TicTacToeUltimateModelUltraLight>();
+    std::shared_ptr<TicTacToeModelImpl> model = std::make_shared<TicTacToeModelImpl>("cpu");
+    torch::load(model, "model_43.pt");
+    model->eval();
 
-    auto sample_input = torch::randn({1, 5, 9, 9});
+    TicTacToe game;
+    std::map<std::string, float> args = {
+            {"num_searches",      500},
+            {"dirichlet_epsilon", 0},
+            {"dirichlet_alpha",   0.1},
+            {"temperature",       0.0}
+    };
+    MCTSLearn mcts(args["dirichlet_epsilon"], args["dirichlet_alpha"]);
 
-    auto [policy, value] = model->forward(sample_input);
+    std::cout << "Welcome to Tic-Tac-Toe!" << std::endl;
 
-    std::cout << "Policy shape: " << policy.sizes() << std::endl;
-    std::cout << "Value shape: " << value.sizes() << std::endl;
+    char choice;
+    bool playerFirst;
+    do {
+        std::cout << "Do you want to play first? (y/n): ";
+        std::cin >> choice;
+    } while (choice != 'y' && choice != 'n');
+    playerFirst = (choice == 'y');
 
-    int64_t total_params = 0;
-    for (const auto &p: model->parameters()) {
-        if (p.requires_grad()) {
-            total_params += p.numel();
-        }
+    if (playerFirst) {
+        std::cout << "You are X, the AI is O." << std::endl;
+    } else {
+        std::cout << "You are O, the AI is X." << std::endl;
     }
-    std::cout << "Total trainable parameters: " << total_params << std::endl;
+
+    while (true) {
+        std::cout << "Current board:" << std::endl;
+        game.printBoard();
+
+        if (playerFirst) {
+            int move;
+            while (true) {
+                std::cout << "Enter your move (0-8): ";
+                std::cin >> move;
+                auto legal_moves = game.getLegalMoves();
+                if (move >= 0 && move < 9 && legal_moves[move]) {
+                    break;
+                }
+                std::cout << "Invalid move. Try again." << std::endl;
+            }
+            game.makeMove(move);
+        } else {
+            std::vector<float> action_probs = mcts.search(&game, *model, args["num_searches"]);
+            std::cout << "Action probabilities:" << std::endl;
+            for (int i = 0; i < 9; ++i) {
+                std::cout << i << ": " << action_probs[i] << " ";
+            }
+            std::cout << std::endl;
+
+            std::discrete_distribution<> dist(action_probs.begin(), action_probs.end());
+            std::mt19937 gen(std::random_device{}());
+            int ai_move = dist(gen);
+
+            auto [policy, value] = model->forward(game.getTorchEncodedState().to(torch::kCUDA).unsqueeze(0));
+            std::cout << "AI policy:" << std::endl;
+            std::cout << policy << std::endl;
+
+            game.makeMove(ai_move);
+            std::cout << "AI chose move: " << ai_move << std::endl;
+        }
+
+        auto [value, is_terminal] = game.getValueAndTerminated();
+        if (is_terminal) {
+            std::cout << "Final board:" << std::endl;
+            game.printBoard();
+            if (value != 0) {
+                std::cout << (!playerFirst ? "AI wins!" : "You win!") << std::endl;
+            } else {
+                std::cout << "It's a draw!" << std::endl;
+            }
+            break;
+        }
+
+        playerFirst = !playerFirst;
+    }
 
     return 0;
 }

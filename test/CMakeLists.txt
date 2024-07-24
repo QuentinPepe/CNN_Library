@@ -30,6 +30,7 @@ if (GTEST_FOUND)
 
     # Make sure the compiler can find include files for our GameLib library
     target_include_directories(runTests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    target_include_directories(runTests PRIVATE GameLib)
 
     # Discover tests
     include(GoogleTest)

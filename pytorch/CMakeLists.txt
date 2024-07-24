@@ -1,6 +1,10 @@
 add_executable(PyTorch main.cpp
         TicTacToe.h
-        MCTS.h)
+        MCTSLearn.h
+        Node.h
+        TicTacToeUltimateModel.h
+        TicTacToeModel.h
+        AlphaZero.h)
 
 target_link_libraries(PyTorch
         PRIVATE

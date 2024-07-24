@@ -221,95 +221,95 @@ namespace nnm {
 
     TEST_F(TanhTest, ForwardPass
     ) {
-    // Create Tanh layer
-    Tanh tanh;
+        // Create Tanh layer
+        Tanh tanh;
 
-    // Create input tensor
-    Tensor4D input = create_input_tensor();
+        // Create input tensor
+        Tensor4D input = create_input_tensor();
 
-    // Create expected output tensor
-    Tensor4D expected_output = create_expected_output();
+        // Create expected output tensor
+        Tensor4D expected_output = create_expected_output();
 
-    // Perform forward pass
-    Tensor4D output = tanh.forward(input);
+        // Perform forward pass
+        Tensor4D output = tanh.forward(input);
 
-    // Check output dimensions
-    EXPECT_EQ(output
-    .
+        // Check output dimensions
+        EXPECT_EQ(output
+                          .
 
-    getBatchSize(), expected_output
+                                  getBatchSize(), expected_output
 
-    .
+                          .
 
-    getBatchSize()
+                                  getBatchSize()
 
-    );
-    EXPECT_EQ(output
-    .
+        );
+        EXPECT_EQ(output
+                          .
 
-    getChannels(), expected_output
+                                  getChannels(), expected_output
 
-    .
+                          .
 
-    getChannels()
+                                  getChannels()
 
-    );
-    EXPECT_EQ(output
-    .
+        );
+        EXPECT_EQ(output
+                          .
 
-    getHeight(), expected_output
+                                  getHeight(), expected_output
 
-    .
+                          .
 
-    getHeight()
+                                  getHeight()
 
-    );
-    EXPECT_EQ(output
-    .
+        );
+        EXPECT_EQ(output
+                          .
 
-    getWidth(), expected_output
+                                  getWidth(), expected_output
 
-    .
+                          .
 
-    getWidth()
+                                  getWidth()
 
-    );
+        );
 
-    // Check output values
-    for (
-    size_t n = 0;
-    n<output.
+        // Check output values
+        for (
+                size_t n = 0;
+                n < output.
 
-    getBatchSize();
+                        getBatchSize();
 
-    ++n) {
-    for (
-    size_t c = 0;
-    c<output.
+                ++n) {
+            for (
+                    size_t c = 0;
+                    c < output.
 
-    getChannels();
+                            getChannels();
 
-    ++c) {
-    for (
-    size_t h = 0;
-    h<output.
+                    ++c) {
+                for (
+                        size_t h = 0;
+                        h < output.
 
-    getHeight();
+                                getHeight();
 
-    ++h) {
-    for (
-    size_t w = 0;
-    w<output.
+                        ++h) {
+                    for (
+                            size_t w = 0;
+                            w < output.
 
-    getWidth();
+                                    getWidth();
 
-    ++w) {
-    EXPECT_TRUE(is_close(output(n, c, h, w), expected_output(n, c, h, w))
-    );
-}
-}
-}
-}
-}
+                            ++w) {
+                        EXPECT_TRUE(is_close(output(n, c, h, w), expected_output(n, c, h, w))
+                        );
+                    }
+                }
+            }
+        }
+    }
 
 } // namespace nnm
