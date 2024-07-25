@@ -158,6 +158,8 @@ public:
                 return {currentPlayer == Cell::x ? 1.0f : -1.0f, true};
             case GameState::draw:
                 return {0.0f, true};
+            case GameState::running:
+                return {0.0f, false};
             default:
                 throw std::runtime_error("Invalid game state");
         }

@@ -41,7 +41,7 @@ int main() {
 }
 
 
-int main() {
+int maina() {
     torch::Device device(torch::cuda::is_available() ? torch::kCUDA : torch::kCPU);
     std::cout << "Using device: " << (torch::cuda::is_available() ? "CUDA" : "CPU") << std::endl;
 
