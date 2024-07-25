@@ -87,7 +87,7 @@ public:
 
             float value;
             bool is_terminal;
-            std::tie(value, is_terminal) = node->getGame()->getValueAndTerminated();
+                std::tie(value, is_terminal) = node->getGame()->getValueAndTerminated();
             value = -value;
 
             if (!is_terminal) {

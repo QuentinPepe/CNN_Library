@@ -7,7 +7,7 @@
 #include "AlphaZero.h"
 
 
-int main() {
+int maiaaan() {
     torch::Device device(torch::cuda::is_available() ? torch::kCUDA : torch::kCPU);
     std::cout << "Using device: " << (torch::cuda::is_available() ? "CUDA" : "CPU") << std::endl;
 
@@ -22,7 +22,7 @@ int main() {
             {"num_selfPlay_iterations", 500},
             {"num_epochs",              50},
             {"batch_size",              64},
-            {"num_searches",            60},
+            {"num_searches",            300},
             {"dirichlet_epsilon",       0.25},
             {"dirichlet_alpha",         0.3},
             {"temperature",             1.0}
@@ -41,14 +41,14 @@ int main() {
 }
 
 
-int maina() {
+int main() {
     torch::Device device(torch::cuda::is_available() ? torch::kCUDA : torch::kCPU);
     std::cout << "Using device: " << (torch::cuda::is_available() ? "CUDA" : "CPU") << std::endl;
 
     TicTacToeModel model;
     model->to(device);
 
-    torch::load(model, "model_43.pt");
+    torch::load(model, "model_25.pt");
     model->eval();
 
     TicTacToe game;
@@ -56,7 +56,7 @@ int maina() {
             {"num_searches",      500},
             {"dirichlet_epsilon", 0},
             {"dirichlet_alpha",   0.1},
-            {"temperature",       0.0}
+            {"temperature",       1.0}
     };
     MCTSLearn mcts(args["dirichlet_epsilon"], args["dirichlet_alpha"]);
 
