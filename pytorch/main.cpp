@@ -7,13 +7,12 @@
 #include "AlphaZero.h"
 
 
-int maain() {
+int main() {
     torch::Device device(torch::cuda::is_available() ? torch::kCUDA : torch::kCPU);
     std::cout << "Using device: " << (torch::cuda::is_available() ? "CUDA" : "CPU") << std::endl;
 
     TicTacToe game;
-
-    auto model = std::make_shared<TicTacToeModelImpl>(device.str());
+    TicTacToeModel model;
     model->to(device);
 
     torch::optim::Adam optimizer(model->parameters(), torch::optim::AdamOptions(0.001));
@@ -36,14 +35,19 @@ int maain() {
     std::cout << "Training completed." << std::endl;
 
     torch::save(model, "final_model.pt");
-    std::cout << "Final model saved." << std::endl;
+    std::cout << "Final _model saved." << std::endl;
 
     return 0;
 }
 
 
 int main() {
-    std::shared_ptr<TicTacToeModelImpl> model = std::make_shared<TicTacToeModelImpl>("cpu");
+    torch::Device device(torch::cuda::is_available() ? torch::kCUDA : torch::kCPU);
+    std::cout << "Using device: " << (torch::cuda::is_available() ? "CUDA" : "CPU") << std::endl;
+
+    TicTacToeModel model;
+    model->to(device);
+
     torch::load(model, "model_43.pt");
     model->eval();
 
@@ -89,7 +93,7 @@ int main() {
             }
             game.makeMove(move);
         } else {
-            std::vector<float> action_probs = mcts.search(&game, *model, args["num_searches"]);
+            std::vector<float> action_probs = mcts.search(&game, model, args["num_searches"]);
             std::cout << "Action probabilities:" << std::endl;
             for (int i = 0; i < 9; ++i) {
                 std::cout << i << ": " << action_probs[i] << " ";
@@ -100,7 +104,7 @@ int main() {
             std::mt19937 gen(std::random_device{}());
             int ai_move = dist(gen);
 
-            auto [policy, value] = model->forward(game.getTorchEncodedState().to(torch::kCUDA).unsqueeze(0));
+            auto [policy, value] = model(game.getTorchEncodedState().to(torch::kCUDA).unsqueeze(0));
             std::cout << "AI policy:" << std::endl;
             std::cout << policy << std::endl;
 

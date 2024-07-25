@@ -2,6 +2,7 @@
 
 #include <torch/torch.h>
 #include <random>
+#include <utility>
 #include <vector>
 #include <random>
 #include <algorithm>
@@ -12,7 +13,7 @@
 
 class AlphaZero {
 private:
-    std::shared_ptr<TicTacToeModelImpl> model;
+    TicTacToeModel _model;
     torch::optim::Optimizer &optimizer;
     TicTacToe game;
     std::map<std::string, float> args;
@@ -25,7 +26,7 @@ private:
 
         while (true) {
             TicTacToe neutral_state = state;
-            std::vector<float> action_probs = mcts.search(&neutral_state, *model, args["num_searches"]);
+            std::vector<float> action_probs = mcts.search(&neutral_state, _model, args["num_searches"]);
             memory.emplace_back(neutral_state.getTorchEncodedState(), action_probs, player);
 
             auto legal_moves = state.getLegalMoves();
@@ -66,7 +67,7 @@ private:
         std::iota(indices.begin(), indices.end(), 0);
         std::shuffle(indices.begin(), indices.end(), std::mt19937(std::random_device()()));
 
-        auto device = model->parameters()[0].device();
+        auto device = _model->parameters()[0].device();
 
         for (size_t batchIdx = 0; batchIdx < memory.size(); batchIdx += args["batch_size"]) {
             std::vector<at::Tensor> states, policy_targets, value_targets;
@@ -83,7 +84,7 @@ private:
             auto policy_target_batch = torch::stack(policy_targets);
             auto value_target_batch = torch::stack(value_targets).view({-1, 1});
 
-            auto [out_policy, out_value] = model->forward(state_batch);
+            auto [out_policy, out_value] = _model(state_batch);
 
             auto policy_loss = torch::nn::functional::cross_entropy(out_policy, policy_target_batch);
             auto value_loss = torch::nn::functional::mse_loss(out_value, value_target_batch);
@@ -96,9 +97,9 @@ private:
     }
 
 public:
-    AlphaZero(std::shared_ptr<TicTacToeModelImpl> model, torch::optim::Optimizer &optimizer,
+    AlphaZero(TicTacToeModel &model, torch::optim::Optimizer &optimizer,
               TicTacToe game, std::map<std::string, float> args)
-            : model(model), optimizer(optimizer), game(game), args(args),
+            : _model(std::move(model)), optimizer(optimizer), game(game), args(args),
               mcts(args["dirichlet_epsilon"], args["dirichlet_alpha"]) {}
 
     void learn() {
@@ -107,7 +108,7 @@ public:
 
             std::vector<std::tuple<at::Tensor, std::vector<float>, float>> memory;
 
-            model->eval();
+            _model->eval();
             for (int selfPlay_iteration = 0;
                  selfPlay_iteration < args["num_selfPlay_iterations"]; ++selfPlay_iteration) {
                 /* std::cout << "Self-play iteration " << selfPlay_iteration + 1 << "/" << args["num_selfPlay_iterations"]
@@ -118,13 +119,13 @@ public:
 
             std::cout << "Self-play completed. Samples: " << memory.size() << std::flush << std::endl;
 
-            model->train();
+            _model->train();
             for (int epoch = 0; epoch < args["num_epochs"]; ++epoch) {
                 train(memory);
             }
 
-            std::cout << "Saving model for iteration " << iteration + 1 << std::flush << std::endl;
-            torch::save(model, "model_" + std::to_string(iteration) + ".pt");
+            std::cout << "Saving _model for iteration " << iteration + 1 << std::flush << std::endl;
+            torch::save(_model, "model_" + std::to_string(iteration) + ".pt");
             torch::save(optimizer, "optimizer_" + std::to_string(iteration) + ".pt");
         }
 

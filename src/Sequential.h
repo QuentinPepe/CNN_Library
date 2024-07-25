@@ -45,14 +45,14 @@ namespace nnm {
 
         size_t get_input_size() const override {
             if (layers.empty()) {
-                throw std::runtime_error("Sequential model is empty.");
+                throw std::runtime_error("Sequential _model is empty.");
             }
             return layers.front()->get_input_size();
         }
 
         size_t get_output_size() const override {
             if (layers.empty()) {
-                throw std::runtime_error("Sequential model is empty.");
+                throw std::runtime_error("Sequential _model is empty.");
             }
             return layers.back()->get_output_size();
         }

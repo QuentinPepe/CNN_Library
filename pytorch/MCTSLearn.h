@@ -34,17 +34,17 @@ private:
         if (child->getVisits() != 0) {
             q_value = 1 - ((child->getReward() / child->getVisits()) + 1) / 2;
         }
-        return q_value + C * sqrtf(logf(parent->getVisits()) / child->getVisits()) * child->getProbability();
+        return q_value + C * (sqrtf(parent->getVisits()) / (child->getVisits() + 1)) * child->getProbability();
     }
 
 public:
     MCTSLearn(float dirichlet_epsilon, float dirichlet_alpha) : dirichlet_epsilon(dirichlet_epsilon),
                                                                 dirichlet_alpha(dirichlet_alpha) {}
 
-    std::vector<float> search(TicTacToe *game, TicTacToeModelImpl &model, int num_searches) {
+    std::vector<float> search(TicTacToe *game, TicTacToeModel &model, int num_searches) {
         Node root(game, nullptr, 9);
         at::Tensor state = game->getTorchEncodedState().to(torch::cuda::is_available() ? torch::kCUDA : torch::kCPU);
-        auto [policy, _] = model.forward(state.unsqueeze(0));
+        auto [policy, _] = model(state.unsqueeze(0));
 
         std::random_device rd;
         std::mt19937 gen(rd());
@@ -93,7 +93,7 @@ public:
             if (!is_terminal) {
                 at::Tensor child_state = node->getGame()->getTorchEncodedState().to(
                         torch::cuda::is_available() ? torch::kCUDA : torch::kCPU);
-                auto [child_policy, child_value] = model.forward(child_state.unsqueeze(0));
+                auto [child_policy, child_value] = model(child_state.unsqueeze(0));
 
                 const auto child_valid_moves = node->getGame()->getLegalMoves();
                 for (int i = 0; i < game->getActionSize(); ++i) {
