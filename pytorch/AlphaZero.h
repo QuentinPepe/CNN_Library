@@ -20,16 +20,14 @@ private:
     MCTSLearn mcts;
 
     std::vector<std::tuple<at::Tensor, std::vector<float>, float>> selfPlay() {
-        std::vector<std::tuple<at::Tensor, std::vector<float>, int>> memory;
-        int player = 1;
+        std::vector<std::tuple<at::Tensor, std::vector<float>, Player>> memory;
+        Player player = Player::x;
         TicTacToe state = game;
 
         while (true) {
             TicTacToe neutral_state = state;
-            std::vector<float> action_probs = mcts.search(&neutral_state, _model, args["num_searches"]);
+            std::vector<float> action_probs = mcts.search(neutral_state, _model, args["num_searches"]);
             memory.emplace_back(neutral_state.getTorchEncodedState(), action_probs, player);
-
-            auto legal_moves = state.getLegalMoves();
 
             std::array<float, 9> legal_temperature_probs = {0};
             for (int move = 0; move < 9; ++move) {
@@ -50,15 +48,25 @@ private:
             auto [value, is_terminal] = state.getValueAndTerminated();
 
             if (is_terminal) {
+                //state.printBoard();
                 std::vector<std::tuple<at::Tensor, std::vector<float>, float>> returnMemory;
                 for (const auto &[hist_neutral_state, hist_action_probs, hist_player]: memory) {
                     float hist_outcome = (hist_player == player) ? value : -value;
+                    /*
+                    if (hist_player == Player::x) {
+                        std::cout << "Player X" << std::endl;
+                    } else {
+                        std::cout << "Player O" << std::endl;
+                    }
+                    std::cout << hist_outcome << std::endl;
+                    std::cout << hist_neutral_state << std::endl;
+                     */
                     returnMemory.emplace_back(hist_neutral_state, hist_action_probs, hist_outcome);
                 }
                 return returnMemory;
             }
 
-            player = -player;  // Switch player
+            player = (player == Player::x) ? Player::o : Player::x;
         }
     }
 

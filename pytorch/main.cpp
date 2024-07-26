@@ -7,7 +7,7 @@
 #include "AlphaZero.h"
 
 
-int maiaaan() {
+int mainaa() {
     torch::Device device(torch::cuda::is_available() ? torch::kCUDA : torch::kCPU);
     std::cout << "Using device: " << (torch::cuda::is_available() ? "CUDA" : "CPU") << std::endl;
 
@@ -20,12 +20,12 @@ int maiaaan() {
     std::map<std::string, float> args = {
             {"num_iterations",          50},
             {"num_selfPlay_iterations", 500},
-            {"num_epochs",              50},
+            {"num_epochs",              100},
             {"batch_size",              64},
-            {"num_searches",            300},
+            {"num_searches",            150},
             {"dirichlet_epsilon",       0.25},
             {"dirichlet_alpha",         0.3},
-            {"temperature",             1.0}
+            {"temperature",             1.25}
     };
 
     AlphaZero alphaZero(model, optimizer, game, args);
@@ -48,12 +48,12 @@ int main() {
     TicTacToeModel model;
     model->to(device);
 
-    torch::load(model, "model_25.pt");
+    torch::load(model, "model_3.pt");
     model->eval();
 
     TicTacToe game;
     std::map<std::string, float> args = {
-            {"num_searches",      500},
+            {"num_searches",      1500},
             {"dirichlet_epsilon", 0},
             {"dirichlet_alpha",   0.1},
             {"temperature",       1.0}
@@ -93,7 +93,7 @@ int main() {
             }
             game.makeMove(move);
         } else {
-            std::vector<float> action_probs = mcts.search(&game, model, args["num_searches"]);
+            std::vector<float> action_probs = mcts.search(game, model, args["num_searches"]);
             std::cout << "Action probabilities:" << std::endl;
             for (int i = 0; i < 9; ++i) {
                 std::cout << i << ": " << action_probs[i] << " ";
@@ -129,3 +129,4 @@ int main() {
 
     return 0;
 }
+

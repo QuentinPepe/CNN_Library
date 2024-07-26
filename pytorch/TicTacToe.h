@@ -19,12 +19,6 @@ enum class GameState : uint8_t {
     running = 3
 };
 
-enum class Cell : uint8_t {
-    x,
-    o,
-    empty
-};
-
 
 struct TicTacToe {
 
@@ -32,7 +26,7 @@ private:
     uint16_t x_board;
     uint16_t o_board;
     GameState game_state;
-    Cell currentPlayer;
+    Player currentPlayer;
 
     static bool checkWin(uint16_t board) {
         uint16_t horizontal = 0b000000111;
@@ -55,21 +49,21 @@ private:
     }
 
 public:
-    TicTacToe() : x_board(0), o_board(0), game_state(GameState::running), currentPlayer(Cell::x) {}
+    TicTacToe() : x_board(0), o_board(0), game_state(GameState::running), currentPlayer(Player::x) {}
 
     TicTacToe(const TicTacToe &other) : x_board(other.x_board), o_board(other.o_board), game_state(other.game_state),
                                         currentPlayer(other.currentPlayer) {}
 
     void makeMove(uint8_t move) {
         uint16_t bit = 1 << move;
-        if (currentPlayer == Cell::x) {
+        if (currentPlayer == Player::x) {
             x_board |= bit;
             game_state = checkWin(x_board) ? GameState::x_win : GameState::running;
-            currentPlayer = Cell::o;
-        } else if (currentPlayer == Cell::o) {
+            currentPlayer = Player::o;
+        } else if (currentPlayer == Player::o) {
             o_board |= bit;
             game_state = checkWin(o_board) ? GameState::o_win : GameState::running;
-            currentPlayer = Cell::x;
+            currentPlayer = Player::x;
         }
 
         if (game_state == GameState::running && (x_board | o_board) == BOARD_MASK) {
@@ -104,7 +98,7 @@ public:
     [[nodiscard]] nnm::Tensor4D getEncodedState() const {
         nnm::Tensor4D tensor(1, 3, 3, 3);
 
-        int xIndex = currentPlayer == Cell::x ? 0 : 1;
+        int xIndex = currentPlayer == Player::x ? 0 : 1;
         int oIndex = abs(1 - xIndex);
 
         for (int i = 0; i < 3; i++) {
@@ -124,8 +118,8 @@ public:
     [[nodiscard]] at::Tensor getTorchEncodedState() const {
         at::Tensor tensor = at::zeros({3, 3, 3}, at::kFloat);
 
-        int xIndex = currentPlayer == Cell::x ? 0 : 1;
-        int oIndex = abs(1 - xIndex);
+        int xIndex = currentPlayer == Player::x ? 0 : 1;
+        int oIndex = 1 - xIndex;
 
         for (int i = 0; i < 3; i++) {
             for (int j = 0; j < 3; j++) {
@@ -153,9 +147,9 @@ public:
     [[nodiscard]] std::pair<float, bool> getValueAndTerminated() const {
         switch (game_state) {
             case GameState::x_win:
-                return {currentPlayer == Cell::o ? 1.0f : -1.0f, true};
+                return {currentPlayer == Player::o ? 1.0f : -1.0f, true};
             case GameState::o_win:
-                return {currentPlayer == Cell::x ? 1.0f : -1.0f, true};
+                return {currentPlayer == Player::x ? 1.0f : -1.0f, true};
             case GameState::draw:
                 return {0.0f, true};
             case GameState::running:
@@ -187,5 +181,18 @@ public:
         game->game_state = game_state;
         game->currentPlayer = currentPlayer;
         return game;
+    }
+
+    Player getCurrentPlayer() const {
+        return currentPlayer;
+    }
+
+    bool isRunning() {
+        return game_state == GameState::running;
+    }
+
+    int CountLegalMoves() const {
+        auto legal_moves = getLegalMoves();
+        return std::count(legal_moves.begin(), legal_moves.end(), 1);
     }
 };
