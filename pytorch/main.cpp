@@ -25,7 +25,9 @@ int main() {
             {"num_searches",            150},
             {"dirichlet_epsilon",       0.25},
             {"dirichlet_alpha",         0.3},
-            {"temperature",             1.25}
+            {"temperature",             1.25},
+            {"thread_factor",           0.75},
+            {"eval_games",              100}
     };
 
     AlphaZero alphaZero(model, optimizer, game, args);
@@ -57,7 +59,8 @@ int mainaaa() {
             {"dirichlet_epsilon", 0},
             {"dirichlet_alpha",   0.1},
             {"temperature",       1.0},
-            {"thread_factor",     0.75}
+            {"thread_factor",     0.75},
+            {"eval_games",        100}
     };
     MCTSLearn mcts(args["dirichlet_epsilon"], args["dirichlet_alpha"]);
 

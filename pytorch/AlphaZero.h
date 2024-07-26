@@ -118,16 +118,65 @@ private:
             auto value_target_batch = torch::stack(value_targets).view({-1, 1});
 
             auto [out_policy, out_value] = _model(state_batch);
-
-            auto policy_loss = torch::nn::functional::cross_entropy(out_policy, policy_target_batch);
+            auto out_policy_probs = torch::softmax(out_policy, 1);
+            auto policy_loss = torch::kl_div(out_policy_probs.log(), policy_target_batch, torch::Reduction::Mean);
             auto value_loss = torch::nn::functional::mse_loss(out_value, value_target_batch);
-            auto loss = policy_loss + value_loss;
+            float policy_weight = 1.0f;
+            float value_weight = 1.0f;
+
+            auto loss = policy_weight * policy_loss + value_weight * value_loss;
 
             optimizer.zero_grad();
             loss.backward();
             optimizer.step();
         }
     }
+
+    float evaluateModels(TicTacToeModel &new_model, TicTacToeModel &old_model, int num_games) {
+        int new_model_wins = 0;
+        int old_model_wins = 0;
+        int draws = 0;
+
+        for (int i = 0; i < num_games; ++i) {
+            TicTacToe state = game;
+            Player current_player = Player::x;
+            bool new_model_is_x = (i % 2 == 0);  // Alternate starting player
+
+            while (true) {
+                TicTacToeModel &current_model = (new_model_is_x == (current_player == Player::x)) ? new_model
+                                                                                                  : old_model;
+                std::vector<float> action_probs = mcts.search(state, current_model, args["num_searches"]);
+
+                int action = std::distance(action_probs.begin(),
+                                           std::max_element(action_probs.begin(), action_probs.end()));
+                state.makeMove(action);
+
+                auto [value, is_terminal] = state.getValueAndTerminated();
+
+                if (is_terminal) {
+                    if (value == 1) {
+                        new_model_is_x ? ++new_model_wins : ++old_model_wins;
+                    } else if (value == -1) {
+                        new_model_is_x ? ++old_model_wins : ++new_model_wins;
+                    } else {
+                        ++draws;
+                    }
+                    break;
+                }
+
+                current_player = (current_player == Player::x) ? Player::o : Player::x;
+            }
+        }
+
+        float new_model_score = (new_model_wins + 0.5f * draws) / num_games;
+        std::cout << "Evaluation results: New model wins: " << new_model_wins
+                  << ", Old model wins: " << old_model_wins
+                  << ", Draws: " << draws << std::endl;
+        std::cout << "New model score: " << new_model_score << std::endl;
+
+        return new_model_score;
+    }
+
 
 public:
     AlphaZero(TicTacToeModel &model, torch::optim::Optimizer &optimizer,
@@ -136,6 +185,9 @@ public:
               mcts(args["dirichlet_epsilon"], args["dirichlet_alpha"]) {}
 
     void learn() {
+        TicTacToeModel best_model = _model;
+        float best_score = 0.0f;
+
         for (int iteration = 0; iteration < args["num_iterations"]; ++iteration) {
             std::cout << "Iteration " << iteration + 1 << "/" << args["num_iterations"] << std::flush << std::endl;
 
@@ -166,8 +218,28 @@ public:
             std::cout << "Saving model for iteration " << iteration + 1 << std::flush << std::endl;
             torch::save(_model, "model_" + std::to_string(iteration) + ".pt");
             torch::save(optimizer, "optimizer_" + std::to_string(iteration) + ".pt");
+
+            std::cout << "Evaluating new model against best model..." << std::endl;
+
+            TicTacToeModel new_model_copy = _model;
+            TicTacToeModel best_model_copy = best_model;
+
+            float new_model_score = evaluateModels(new_model_copy, best_model_copy, args["eval_games"]);
+
+            if (new_model_score > best_score) {
+                std::cout << "New best model found! Score: " << new_model_score << std::endl;
+                best_model = _model;
+                best_score = new_model_score;
+                torch::save(best_model, "best_model.pt");
+            } else {
+                std::cout << "No improvement. Keeping previous best model." << std::endl;
+            }
+
+            std::cout << "Saving model for iteration " << iteration + 1 << std::flush << std::endl;
+            torch::save(_model, "model_" + std::to_string(iteration) + ".pt");
+            torch::save(optimizer, "optimizer_" + std::to_string(iteration) + ".pt");
         }
 
-        std::cout << "Training completed." << std::flush << std::endl;
+        std::cout << "Training completed. Best model score: " << best_score << std::endl;
     }
 };
