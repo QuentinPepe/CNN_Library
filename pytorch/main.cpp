@@ -20,7 +20,7 @@ int main() {
     std::map<std::string, float> args = {
             {"num_iterations",          50},
             {"num_selfPlay_iterations", 500},
-            {"num_epochs",              100},
+            {"num_epochs",              25},
             {"batch_size",              64},
             {"num_searches",            150},
             {"dirichlet_epsilon",       0.25},
@@ -43,14 +43,14 @@ int main() {
 }
 
 
-int mainaaa() {
+int maina() {
     torch::Device device(torch::cuda::is_available() ? torch::kCUDA : torch::kCPU);
     std::cout << "Using device: " << (torch::cuda::is_available() ? "CUDA" : "CPU") << std::endl;
 
     TicTacToeModel model;
     model->to(device);
 
-    torch::load(model, "model_3.pt");
+    torch::load(model, "best_model.pt");
     model->eval();
 
     TicTacToe game;
@@ -60,7 +60,8 @@ int mainaaa() {
             {"dirichlet_alpha",   0.1},
             {"temperature",       1.0},
             {"thread_factor",     0.75},
-            {"eval_games",        100}
+            {"eval_games",        100},
+            {"log_interval",      15}
     };
     MCTSLearn mcts(args["dirichlet_epsilon"], args["dirichlet_alpha"]);
 

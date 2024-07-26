@@ -117,18 +117,36 @@ private:
             auto policy_target_batch = torch::stack(policy_targets);
             auto value_target_batch = torch::stack(value_targets).view({-1, 1});
 
-            auto [out_policy, out_value] = _model(state_batch);
-            auto out_policy_probs = torch::softmax(out_policy, 1);
-            auto policy_loss = torch::kl_div(out_policy_probs.log(), policy_target_batch, torch::Reduction::Mean);
-            auto value_loss = torch::nn::functional::mse_loss(out_value, value_target_batch);
-            float policy_weight = 1.0f;
-            float value_weight = 1.0f;
+            // Forward pass
+            auto [policy_output, value_output] = _model(state_batch);
 
-            auto loss = policy_weight * policy_loss + value_weight * value_loss;
+            // Calculate loss
+            auto policy_loss = torch::nn::functional::cross_entropy(policy_output, policy_target_batch);
+            auto value_loss = torch::nn::functional::mse_loss(value_output, value_target_batch);
 
+            // L2 regularization
+            float l2_reg = args["l2_reg"];
+            auto l2_loss = torch::tensor(0.0).to(device);
+            for (const auto &p: _model->parameters()) {
+                l2_loss += torch::sum(torch::pow(p, 2));
+            }
+
+            auto total_loss = policy_loss + value_loss + l2_reg * l2_loss;
+
+            // Backward pass and optimization
             optimizer.zero_grad();
-            loss.backward();
+            total_loss.backward();
             optimizer.step();
+
+            if (args.count("log_interval") > 0) {
+                size_t log_interval = static_cast<size_t>(args["log_interval"]);
+                if (log_interval > 0 && (batchIdx / static_cast<size_t>(args["batch_size"])) % log_interval == 0) {
+                    std::cout << "Batch " << batchIdx / static_cast<size_t>(args["batch_size"])
+                              << ", Policy Loss: " << policy_loss.item<float>()
+                              << ", Value Loss: " << value_loss.item<float>()
+                              << ", Total Loss: " << total_loss.item<float>() << std::endl;
+                }
+            }
         }
     }
 
@@ -226,7 +244,7 @@ public:
 
             float new_model_score = evaluateModels(new_model_copy, best_model_copy, args["eval_games"]);
 
-            if (new_model_score > best_score) {
+            if (new_model_score >= 0.5f) {
                 std::cout << "New best model found! Score: " << new_model_score << std::endl;
                 best_model = _model;
                 best_score = new_model_score;
