@@ -7,7 +7,7 @@
 #include "AlphaZero.h"
 
 
-int mainaa() {
+int main() {
     torch::Device device(torch::cuda::is_available() ? torch::kCUDA : torch::kCPU);
     std::cout << "Using device: " << (torch::cuda::is_available() ? "CUDA" : "CPU") << std::endl;
 
@@ -41,7 +41,7 @@ int mainaa() {
 }
 
 
-int main() {
+int mainaaa() {
     torch::Device device(torch::cuda::is_available() ? torch::kCUDA : torch::kCPU);
     std::cout << "Using device: " << (torch::cuda::is_available() ? "CUDA" : "CPU") << std::endl;
 
@@ -56,7 +56,8 @@ int main() {
             {"num_searches",      1500},
             {"dirichlet_epsilon", 0},
             {"dirichlet_alpha",   0.1},
-            {"temperature",       1.0}
+            {"temperature",       1.0},
+            {"thread_factor",     0.75}
     };
     MCTSLearn mcts(args["dirichlet_epsilon"], args["dirichlet_alpha"]);
 

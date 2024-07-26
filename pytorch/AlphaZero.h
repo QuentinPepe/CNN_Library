@@ -19,7 +19,42 @@ private:
     std::map<std::string, float> args;
     MCTSLearn mcts;
 
-    std::vector<std::tuple<at::Tensor, std::vector<float>, float>> selfPlay() {
+    std::vector<std::tuple<at::Tensor, std::vector<float>, float>> selfPlayParallel(int num_games) {
+        std::vector<std::thread> threads;
+        std::vector<std::vector<std::tuple<at::Tensor, std::vector<float>, float>>> thread_memories(num_games);
+
+        for (int i = 0; i < num_games; ++i) {
+            threads.emplace_back([this, i, &thread_memories]() {
+                thread_memories[i] = this->selfPlaySingle();
+            });
+        }
+
+        for (auto &thread: threads) {
+            thread.join();
+        }
+
+        std::vector<std::tuple<at::Tensor, std::vector<float>, float>> combined_memory;
+        for (const auto &memory: thread_memories) {
+            combined_memory.insert(combined_memory.end(), memory.begin(), memory.end());
+        }
+
+        return combined_memory;
+    }
+
+    int determineOptimalThreadCount() {
+        unsigned int hardware_threads = std::thread::hardware_concurrency();
+
+        if (hardware_threads == 0) {
+            hardware_threads = 2;
+        }
+
+        float thread_factor = args.count("thread_factor") ? args["thread_factor"] : 0.75f;
+
+        return std::max(1, static_cast<int>(hardware_threads * thread_factor));
+    }
+
+
+    std::vector<std::tuple<at::Tensor, std::vector<float>, float>> selfPlaySingle() {
         std::vector<std::tuple<at::Tensor, std::vector<float>, Player>> memory;
         Player player = Player::x;
         TicTacToe state = game;
@@ -48,19 +83,9 @@ private:
             auto [value, is_terminal] = state.getValueAndTerminated();
 
             if (is_terminal) {
-                //state.printBoard();
                 std::vector<std::tuple<at::Tensor, std::vector<float>, float>> returnMemory;
                 for (const auto &[hist_neutral_state, hist_action_probs, hist_player]: memory) {
                     float hist_outcome = (hist_player == player) ? value : -value;
-                    /*
-                    if (hist_player == Player::x) {
-                        std::cout << "Player X" << std::endl;
-                    } else {
-                        std::cout << "Player O" << std::endl;
-                    }
-                    std::cout << hist_outcome << std::endl;
-                    std::cout << hist_neutral_state << std::endl;
-                     */
                     returnMemory.emplace_back(hist_neutral_state, hist_action_probs, hist_outcome);
                 }
                 return returnMemory;
@@ -117,22 +142,28 @@ public:
             std::vector<std::tuple<at::Tensor, std::vector<float>, float>> memory;
 
             _model->eval();
-            for (int selfPlay_iteration = 0;
-                 selfPlay_iteration < args["num_selfPlay_iterations"]; ++selfPlay_iteration) {
-                /* std::cout << "Self-play iteration " << selfPlay_iteration + 1 << "/" << args["num_selfPlay_iterations"]
-                          << std::flush << std::endl; */
-                auto new_memory = selfPlay();
-                memory.insert(memory.end(), new_memory.begin(), new_memory.end());
+            int num_threads = determineOptimalThreadCount();
+            int games_per_thread = std::max(1, static_cast<int>(args["num_selfPlay_iterations"]) / num_threads);
+            int total_games = num_threads * games_per_thread;
+
+            std::cout << "Starting " << total_games << " self-play games on " << num_threads << " threads..."
+                      << std::endl;
+
+            for (int i = 0; i < total_games; i += num_threads) {
+                int games_this_batch = std::min(num_threads, total_games - i);
+                auto batch_memory = selfPlayParallel(games_this_batch);
+                memory.insert(memory.end(), batch_memory.begin(), batch_memory.end());
+                std::cout << "Completed " << i + games_this_batch << "/" << total_games << " games" << std::endl;
             }
 
-            std::cout << "Self-play completed. Samples: " << memory.size() << std::flush << std::endl;
+            std::cout << "Self-play completed. Total samples: " << memory.size() << std::flush << std::endl;
 
             _model->train();
             for (int epoch = 0; epoch < args["num_epochs"]; ++epoch) {
                 train(memory);
             }
 
-            std::cout << "Saving _model for iteration " << iteration + 1 << std::flush << std::endl;
+            std::cout << "Saving model for iteration " << iteration + 1 << std::flush << std::endl;
             torch::save(_model, "model_" + std::to_string(iteration) + ".pt");
             torch::save(optimizer, "optimizer_" + std::to_string(iteration) + ".pt");
         }
